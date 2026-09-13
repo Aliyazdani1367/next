@@ -1,0 +1,153 @@
+package api
+
+import "github.com/nextpanel/next/internal/app/nodecontroller"
+
+func flattenNodeItem(node nodecontroller.NodeListItem) map[string]any {
+	return map[string]any{
+		"id":                       node.ID,
+		"name":                     node.Name,
+		"note":                     node.Note,
+		"address":                  node.Address,
+		"port":                     node.Port,
+		"control_port":             node.Port,
+		"api_port":                 node.APIPort,
+		"usage_coefficient":        node.UsageCoefficient,
+		"data_limit":               node.DataLimit,
+		"proxy_enabled":            node.ProxyEnabled,
+		"proxy_type":               node.ProxyType,
+		"proxy_host":               node.ProxyHost,
+		"proxy_port":               node.ProxyPort,
+		"proxy_username":           node.ProxyUsername,
+		"proxy_password":           node.ProxyPassword,
+		"status":                   node.Status,
+		"agent_status":             node.AgentStatus,
+		"xray_status":              node.XrayStatus,
+		"desired_revision":         node.DesiredRevision,
+		"applied_revision":         node.AppliedRevision,
+		"capabilities":             node.Capabilities,
+		"protocol_statuses":        node.ProtocolStatuses,
+		"message":                  node.Message,
+		"xray_version":             node.XrayVersion,
+		"node_service_version":     node.NodeServiceVersion,
+		"node_install_mode":        node.NodeInstallMode,
+		"node_binary_tag":          nil,
+		"node_update_channel":      node.NodeUpdateChannel,
+		"cpu_cores":                node.CPU.Cores,
+		"cpu_frequency_hz":         node.CPU.FrequencyHz,
+		"cpu_usage_percent":        node.CPU.UsagePercent,
+		"memory_used":              node.Memory.UsedBytes,
+		"memory_total":             node.Memory.TotalBytes,
+		"memory_usage_percent":     node.Memory.UsagePercent,
+		"uptime_seconds":           node.UptimeSeconds,
+		"xray_pid":                 node.XrayMetrics.PID,
+		"xray_cpu_usage_percent":   node.XrayMetrics.CPUPercent,
+		"xray_memory_used":         node.XrayMetrics.MemoryUsed,
+		"xray_uptime_seconds":      node.XrayMetrics.UptimeSeconds,
+		"upload_speed":             node.Transfer.UploadSpeed,
+		"download_speed":           node.Transfer.DownloadSpeed,
+		"geo_mode":                 node.GeoMode,
+		"xray_config_mode":         node.XrayConfigMode,
+		"uplink":                   node.Uplink,
+		"downlink":                 node.Downlink,
+		"has_custom_certificate":   node.HasCustomCertificate,
+		"uses_default_certificate": node.UsesDefaultCertificate,
+		"certificate_public_key":   node.CertificatePublicKey,
+		"node_certificate":         node.NodeCertificate,
+		"node_certificate_key":     node.NodeCertificateKey,
+	}
+}
+
+func flattenNodeStaticItem(node nodecontroller.NodeListItem) map[string]any {
+	item := flattenNodeItem(node)
+	for _, key := range []string{
+		"status",
+		"message",
+		"node_service_version",
+		"node_install_mode",
+		"node_binary_tag",
+		"node_update_channel",
+		"cpu_cores",
+		"cpu_frequency_hz",
+		"cpu_usage_percent",
+		"memory_used",
+		"memory_total",
+		"memory_usage_percent",
+		"uptime_seconds",
+		"upload_speed",
+		"download_speed",
+		"protocol_statuses",
+		"xray_pid",
+		"xray_cpu_usage_percent",
+		"xray_memory_used",
+		"xray_uptime_seconds",
+	} {
+		delete(item, key)
+	}
+	return item
+}
+
+func flattenNodeLiveItem(node nodecontroller.NodeListItem) map[string]any {
+	item := flattenNodeItem(node)
+	delete(item, "node_binary_tag")
+	if node.NodeServiceVersion != nil {
+		return item
+	}
+	for _, key := range []string{
+		"node_service_version",
+		"node_install_mode",
+		"node_update_channel",
+		"cpu_cores",
+		"cpu_frequency_hz",
+		"cpu_usage_percent",
+		"memory_used",
+		"memory_total",
+		"memory_usage_percent",
+		"uptime_seconds",
+		"upload_speed",
+		"download_speed",
+		"protocol_statuses",
+		"xray_pid",
+		"xray_cpu_usage_percent",
+		"xray_memory_used",
+		"xray_uptime_seconds",
+	} {
+		delete(item, key)
+	}
+	return item
+}
+
+func flattenRuntimeResult(result nodecontroller.RuntimeResult) map[string]any {
+	return map[string]any{
+		"node_id":                result.NodeID,
+		"name":                   result.Name,
+		"status":                 result.Status,
+		"message":                result.Message,
+		"xray_version":           result.XrayVersion,
+		"node_service_version":   result.NodeServiceVersion,
+		"node_install_mode":      result.InstallMode,
+		"node_binary_tag":        nil,
+		"node_update_channel":    result.UpdateChannel,
+		"connected":              result.Connected,
+		"started":                result.Started,
+		"agent_status":           result.AgentStatus,
+		"xray_status":            result.XrayStatus,
+		"desired_revision":       result.DesiredRevision,
+		"applied_revision":       result.AppliedRevision,
+		"capabilities":           result.Capabilities,
+		"protocol_statuses":      result.ProtocolStatuses,
+		"cpu_cores":              result.CPU.Cores,
+		"cpu_frequency_hz":       result.CPU.FrequencyHz,
+		"cpu_usage_percent":      result.CPU.UsagePercent,
+		"memory_used":            result.Memory.UsedBytes,
+		"memory_total":           result.Memory.TotalBytes,
+		"memory_usage_percent":   result.Memory.UsagePercent,
+		"uptime_seconds":         result.UptimeSeconds,
+		"upload_speed":           result.Transfer.UploadSpeed,
+		"download_speed":         result.Transfer.DownloadSpeed,
+		"xray_pid":               result.XrayMetrics.PID,
+		"xray_cpu_usage_percent": result.XrayMetrics.CPUPercent,
+		"xray_memory_used":       result.XrayMetrics.MemoryUsed,
+		"xray_uptime_seconds":    result.XrayMetrics.UptimeSeconds,
+		"logs":                   result.Logs,
+	}
+}

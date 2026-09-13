@@ -1,0 +1,2556 @@
+package user
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"net"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	outboundsubapp "github.com/nextpanel/next/internal/app/outboundsub"
+	"github.com/nextpanel/next/internal/app/xrayconfig"
+)
+
+const defaultShadowsocksMethod = "chacha20-ietf-poly1305"
+
+var proxyProtocols = map[string]struct{}{
+	"vmess":       {},
+	"vless":       {},
+	"trojan":      {},
+	"shadowsocks": {},
+	"hysteria":    {},
+	"ssh":         {},
+}
+
+var subscriptionDownloadProtocols = map[string]struct{}{
+	"openvpn":    {},
+	"wireguard":  {},
+	"l2tp":       {},
+	"pptp":       {},
+	"ikev2":      {},
+	"anyconnect": {},
+	"sstp":       {},
+	"amneziawg":  {},
+	"gre":        {},
+}
+
+func isResolvableInboundProtocol(protocol string) bool {
+	if _, ok := proxyProtocols[protocol]; ok {
+		return true
+	}
+	_, ok := subscriptionDownloadProtocols[protocol]
+	return ok
+}
+
+type configHost struct {
+	host     Host
+	position int
+}
+
+type queryParam struct {
+	key   string
+	value any
+}
+
+func BuildConfigLinks(
+	item ConfigLinkUser,
+	inbounds map[string]ResolvedInbound,
+	inboundOrder []string,
+	hosts []Host,
+	masks map[string][]byte,
+	reverse bool,
+) (ConfigLinksResponse, error) {
+	username := strings.TrimSpace(item.Username)
+	if username == "" {
+		return ConfigLinksResponse{}, fmt.Errorf("username is required")
+	}
+	if item.ServiceID == nil || *item.ServiceID <= 0 {
+		return ConfigLinksResponse{Links: []string{}}, nil
+	}
+	wildcardBytes := make([]byte, 8)
+	if _, err := rand.Read(wildcardBytes); err != nil {
+		return ConfigLinksResponse{}, fmt.Errorf("generate wildcard salt: %w", err)
+	}
+	wildcardSalt := hex.EncodeToString(wildcardBytes)
+
+	inboundIndex := make(map[string]int, len(inboundOrder))
+	for i, tag := range inboundOrder {
+		inboundIndex[tag] = i
+	}
+	if len(inboundOrder) == 0 {
+		inboundOrder = make([]string, 0, len(inbounds))
+		for tag := range inbounds {
+			inboundOrder = append(inboundOrder, tag)
+		}
+		sort.Strings(inboundOrder)
+		for i, tag := range inboundOrder {
+			inboundIndex[tag] = i
+		}
+	}
+
+	selectedHosts := selectConfigHosts(hosts, item.ServiceID)
+	sortConfigHosts(selectedHosts, item.ServiceHostOrders, inboundIndex)
+	hostsByTag := make(map[string][]configHost)
+	for _, host := range selectedHosts {
+		hostsByTag[host.host.InboundTag] = append(hostsByTag[host.host.InboundTag], host)
+	}
+
+	formatVariables := configFormatVariables(item)
+	proxies := mergeServiceProxies(
+		item.Proxies,
+		virtualServiceProxies(item.ServiceID, inbounds, inboundOrder, hostsByTag),
+	)
+
+	links := make([]string, 0)
+	metadata := make([]ConfigLinkMetadata, 0)
+	type tagBinding struct {
+		settings map[string]any
+		protocol string
+	}
+	// Resolve, per inbound tag, which proxy (protocol) and runtime settings it
+	// belongs to. A tag maps to a single protocol, so first match wins.
+	bindings := make(map[string]tagBinding)
+	for _, proxy := range proxies {
+		protocol := normalizeProxyProtocol(proxy.Type)
+		if _, ok := proxyProtocols[protocol]; !ok {
+			continue
+		}
+		settings, err := runtimeProxySettings(proxy.Settings, protocol, item.CredentialKey, item.Flow, masks)
+		if err != nil {
+			return ConfigLinksResponse{}, err
+		}
+		if protocol == "ssh" {
+			settings["username"] = item.Username
+		}
+		for _, tag := range selectProxyInboundTags(item, proxy, protocol, inbounds, inboundOrder, hostsByTag) {
+			inbound, ok := inbounds[tag]
+			if !ok {
+				continue
+			}
+			if normalizeProxyProtocol(stringValue(inbound["protocol"])) != protocol {
+				continue
+			}
+			if _, exists := bindings[tag]; !exists {
+				bindings[tag] = tagBinding{settings: settings, protocol: protocol}
+			}
+		}
+	}
+
+	// Emit links following the service's configured host order (host-major).
+	// Iterating per protocol instead would group configs by protocol and, for
+	// virtual proxies whose protocols are sorted alphabetically, pull some
+	// protocols (e.g. shadowsocks) to the top regardless of the service order.
+	for _, selected := range selectedHosts {
+		host := selected.host
+		inbound, ok := inbounds[host.InboundTag]
+		if !ok {
+			continue
+		}
+		if normalizeProxyProtocol(stringValue(inbound["protocol"])) == "wireguard" {
+			inboundVariables := cloneFormatVariables(formatVariables)
+			inboundVariables["PROTOCOL"] = "wireguard"
+			inboundVariables["protocol"] = "wireguard"
+			inboundVariables["TRANSPORT"] = configTransportName(inbound)
+			inboundVariables["transport"] = strings.ToLower(inboundVariables["TRANSPORT"])
+			remark, address, effective, ok := effectiveInboundForHost(wildcardSalt, inboundVariables, inbound, host)
+			if !ok {
+				continue
+			}
+			link, err := buildWGShareLink(item, remark, address, effective, host)
+			if err != nil {
+				return ConfigLinksResponse{}, err
+			}
+			if link != "" {
+				links = append(links, link)
+				metadata = append(metadata, configLinkMetadata(effective))
+			}
+			continue
+		}
+		binding, ok := bindings[host.InboundTag]
+		if !ok {
+			continue
+		}
+		inboundVariables := cloneFormatVariables(formatVariables)
+		inboundVariables["PROTOCOL"] = strings.ToUpper(binding.protocol)
+		inboundVariables["protocol"] = binding.protocol
+		inboundVariables["TRANSPORT"] = configTransportName(inbound)
+		inboundVariables["transport"] = strings.ToLower(inboundVariables["TRANSPORT"])
+		remark, address, effective, ok := effectiveInboundForHost(wildcardSalt, inboundVariables, inbound, host)
+		if !ok {
+			continue
+		}
+		link, err := buildShareLink(remark, address, effective, binding.settings)
+		if err != nil {
+			return ConfigLinksResponse{}, err
+		}
+		if link != "" {
+			links = append(links, link)
+			metadata = append(metadata, configLinkMetadata(effective))
+		}
+	}
+
+	if reverse {
+		for i, j := 0, len(links)-1; i < j; i, j = i+1, j-1 {
+			links[i], links[j] = links[j], links[i]
+			metadata[i], metadata[j] = metadata[j], metadata[i]
+		}
+	}
+	return ConfigLinksResponse{Links: links, Metadata: metadata}, nil
+}
+
+func configLinkMetadata(inbound ResolvedInbound) ConfigLinkMetadata {
+	return ConfigLinkMetadata{
+		FinalMask:  configLinkFinalMask(inbound),
+		MuxEnabled: boolValue(inbound["mux_enable"]),
+	}
+}
+
+func configLinkFinalMask(inbound ResolvedInbound) map[string]any {
+	finalMask := cloneJSONMap(mapValue(inbound["finalmask"]))
+	legacy := map[string]any{}
+	if fragment := fragmentFinalMask(stringValue(inbound["fragment_setting"])); len(fragment) > 0 {
+		legacy["tcp"] = []any{map[string]any{"type": "fragment", "settings": fragment}}
+	}
+	if noise := noiseFinalMask(stringValue(inbound["noise_setting"])); len(noise) > 0 {
+		legacy["udp"] = []any{map[string]any{"type": "noise", "settings": map[string]any{"noise": noise}}}
+	}
+	return mergeV2RayFinalMask(finalMask, legacy)
+}
+
+func selectConfigHosts(hosts []Host, serviceID *int64) []configHost {
+	result := make([]configHost, 0, len(hosts))
+	for i, host := range hosts {
+		if host.IsDisabled || strings.EqualFold(strings.TrimSpace(host.InboundTag), "info") {
+			continue
+		}
+		if serviceID != nil && !hostHasService(host, *serviceID) {
+			continue
+		}
+		result = append(result, configHost{host: host, position: i})
+	}
+	return result
+}
+
+func hostHasService(host Host, serviceID int64) bool {
+	for _, candidate := range host.ServiceIDs {
+		if candidate == serviceID {
+			return true
+		}
+	}
+	return false
+}
+
+func virtualServiceProxies(serviceID *int64, inbounds map[string]ResolvedInbound, inboundOrder []string, hostsByTag map[string][]configHost) []StoredProxy {
+	if serviceID == nil || *serviceID <= 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	addProtocol := func(tag string) {
+		if len(hostsByTag[tag]) == 0 {
+			return
+		}
+		inbound, ok := inbounds[tag]
+		if !ok {
+			return
+		}
+		protocol := normalizeProxyProtocol(stringValue(inbound["protocol"]))
+		if _, ok := proxyProtocols[protocol]; ok {
+			seen[protocol] = struct{}{}
+		}
+	}
+	for _, tag := range inboundOrder {
+		addProtocol(tag)
+	}
+	for tag := range hostsByTag {
+		addProtocol(tag)
+	}
+	protocols := make([]string, 0, len(seen))
+	for protocol := range seen {
+		protocols = append(protocols, protocol)
+	}
+	sort.Strings(protocols)
+	result := make([]StoredProxy, 0, len(protocols))
+	for _, protocol := range protocols {
+		result = append(result, StoredProxy{Type: protocol, Settings: map[string]any{}})
+	}
+	return result
+}
+
+func mergeServiceProxies(stored []StoredProxy, service []StoredProxy) []StoredProxy {
+	result := append([]StoredProxy(nil), stored...)
+	seen := make(map[string]struct{}, len(stored))
+	for _, proxy := range stored {
+		seen[normalizeProxyProtocol(proxy.Type)] = struct{}{}
+	}
+	for _, proxy := range service {
+		protocol := normalizeProxyProtocol(proxy.Type)
+		if _, exists := seen[protocol]; exists {
+			continue
+		}
+		result = append(result, proxy)
+		seen[protocol] = struct{}{}
+	}
+	return result
+}
+
+func sortConfigHosts(hosts []configHost, serviceOrders map[int64]int64, inboundIndex map[string]int) {
+	sort.SliceStable(hosts, func(i, j int) bool {
+		left := hosts[i].host
+		right := hosts[j].host
+		leftOrder, leftHasOrder := serviceOrders[left.ID]
+		rightOrder, rightHasOrder := serviceOrders[right.ID]
+		if leftHasOrder != rightHasOrder {
+			return leftHasOrder
+		}
+		if leftHasOrder && leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
+		leftInbound := inboundIndex[left.InboundTag]
+		rightInbound := inboundIndex[right.InboundTag]
+		if leftInbound != rightInbound {
+			return leftInbound < rightInbound
+		}
+		if hosts[i].position != hosts[j].position {
+			return hosts[i].position < hosts[j].position
+		}
+		return left.ID < right.ID
+	})
+}
+
+func selectProxyInboundTags(
+	item ConfigLinkUser,
+	proxy StoredProxy,
+	protocol string,
+	inbounds map[string]ResolvedInbound,
+	inboundOrder []string,
+	hostsByTag map[string][]configHost,
+) []string {
+	result := make([]string, 0)
+	seen := map[string]struct{}{}
+	add := func(tag string) {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			return
+		}
+		if _, exists := seen[tag]; exists {
+			return
+		}
+		if normalizeProxyProtocol(stringValue(inbounds[tag]["protocol"])) != protocol {
+			return
+		}
+		if len(hostsByTag[tag]) == 0 {
+			return
+		}
+		seen[tag] = struct{}{}
+		result = append(result, tag)
+	}
+
+	if item.ServiceID != nil {
+		for _, tag := range inboundOrder {
+			add(tag)
+		}
+		return result
+	}
+
+	if item.Inbounds != nil {
+		if tags, ok := item.Inbounds[protocol]; ok {
+			for _, tag := range tags {
+				add(tag)
+			}
+			return result
+		}
+	}
+
+	excluded := make(map[string]struct{}, len(proxy.ExcludedInbounds))
+	for _, tag := range proxy.ExcludedInbounds {
+		excluded[tag] = struct{}{}
+	}
+	for _, tag := range inboundOrder {
+		if _, skip := excluded[tag]; skip {
+			continue
+		}
+		add(tag)
+	}
+	return result
+}
+
+func effectiveInboundForHost(wildcardSalt string, variables map[string]string, inbound ResolvedInbound, host Host) (string, string, ResolvedInbound, bool) {
+	addressRaw := selectHostRotationValue(host.ID, "address", host.Address, host.AddressOptions, host.AddressMode, host.AddressTTL)
+	address := applyWildcard(applyFormat(addressRaw, variables), wildcardSalt)
+	if address == "" {
+		return "", "", nil, false
+	}
+
+	remark := applyFormat(host.Remark, variables)
+	if remark == "" {
+		remark = address
+	}
+
+	sniRaw := selectHostRotationValue(host.ID, "sni", hostOverrideList(host.SNI, joinStringList(inbound["sni"])), host.SNIOptions, host.SNIMode, host.SNITTL)
+	hostRaw := selectHostRotationValue(host.ID, "host", hostOverrideList(host.Host, joinStringList(inbound["host"])), host.HostOptions, host.HostMode, host.HostTTL)
+	sni := applyWildcard(applyFormat(sniRaw, variables), wildcardSalt)
+	requestHost := applyWildcard(applyFormat(hostRaw, variables), wildcardSalt)
+	if host.UseSNIAsHost && sni != "" {
+		requestHost = sni
+	}
+
+	path := stringValue(inbound["path"])
+	if host.Path != nil && strings.TrimSpace(*host.Path) != "" {
+		path = *host.Path
+	}
+	path = applyFormat(path, variables)
+
+	effective := copyInbound(inbound)
+	if host.Port != nil && normalizeProxyProtocol(stringValue(inbound["protocol"])) != "openvpn" && normalizeProxyProtocol(stringValue(inbound["protocol"])) != "ikev2" {
+		effective["port"] = *host.Port
+	}
+	if tls := normalizedHostSecurity(host.Security); tls != "" {
+		effective["tls"] = tls
+	}
+	if alpn := nonDefaultHostText(host.ALPN); alpn != "" {
+		effective["alpn"] = alpn
+	}
+	if fp := nonDefaultHostFingerprint(host.Fingerprint); fp != "" {
+		effective["fp"] = fp
+	}
+	if value := strings.TrimSpace(host.VerifyPeerCertByName); value != "" {
+		effective["vcn"] = value
+		effective["verifyPeerCertByName"] = value
+	}
+	if value := strings.TrimSpace(host.PinnedPeerCertSHA256); value != "" {
+		effective["pinSHA256"] = value
+		effective["pinnedPeerCertSha256"] = value
+	}
+	if host.AllowInsecure != nil && *host.AllowInsecure {
+		effective["ais"] = *host.AllowInsecure
+	}
+	if len(host.FinalMask) > 0 {
+		effective["finalmask"] = mergeHostFinalMask(inbound["finalmask"], host.FinalMask)
+		delete(effective, "fragment_setting")
+		delete(effective, "noise_setting")
+	} else {
+		if host.FragmentSetting != nil {
+			effective["fragment_setting"] = *host.FragmentSetting
+		}
+		if host.NoiseSetting != nil {
+			effective["noise_setting"] = *host.NoiseSetting
+		}
+	}
+	effective["mux_enable"] = host.MuxEnable
+	effective["random_user_agent"] = host.RandomUserAgent
+	effective["sni"] = sni
+	effective["host"] = requestHost
+	effective["path"] = path
+	if pbk := firstNonEmptyString(inbound["pbk"], inbound["publicKey"], inbound["public_key"]); pbk != "" {
+		effective["pbk"] = pbk
+	}
+	effective["sid"] = firstNonEmptyString(firstStringList(inbound["sids"]), inbound["sid"], firstStringList(inbound["shortIds"]), inbound["shortId"])
+	if normalizeProxyProtocol(stringValue(effective["protocol"])) == "hysteria" {
+		applyHysteriaFinalMaskShareFields(effective)
+	}
+	return remark, address, effective, true
+}
+
+func mergeHostFinalMask(inherited any, override map[string]any) map[string]any {
+	merged := make(map[string]any, len(mapValue(inherited))+len(override))
+	for key, value := range mapValue(inherited) {
+		merged[key] = value
+	}
+	for key, value := range override {
+		if key == "quicParams" {
+			quic := make(map[string]any)
+			for inheritedKey, inheritedValue := range mapValue(merged[key]) {
+				quic[inheritedKey] = inheritedValue
+			}
+			for overrideKey, overrideValue := range mapValue(value) {
+				quic[overrideKey] = overrideValue
+			}
+			merged[key] = quic
+			continue
+		}
+		merged[key] = value
+	}
+	return merged
+}
+
+func mergeResolvedInboundMetadata(target ResolvedInbound, source ResolvedInbound) {
+	if target == nil || source == nil {
+		return
+	}
+	for _, key := range []string{
+		"tls", "sni", "host", "path", "header_type", "fp", "alpn", "ais", "allowinsecure", "flow", "cipherSuites",
+		"ech", "echConfigList", "vcn", "verifyPeerCertByName", "pinSHA256", "pinnedPeerCertSha256",
+		"pbk", "publicKey", "public_key", "sids", "sid", "shortIds", "shortId", "spx", "pqv",
+		"fragment_setting", "noise_setting",
+		"mtu", "tti", "finalmask",
+		"headers", "sessionIDTable", "sessionIDLength", "downloadSettings",
+		"scMaxEachPostBytes", "scMaxConcurrentPosts", "scMinPostsIntervalMs",
+		"xPaddingBytes", "noGRPCHeader", "keepAlivePeriod", "xmux", "mode",
+		"xPaddingObfsMode", "xPaddingKey", "xPaddingHeader", "xPaddingPlacement",
+		"xPaddingMethod", "uplinkHTTPMethod", "sessionIDPlacement", "sessionIDKey", "seqPlacement",
+		"seqKey", "uplinkDataPlacement", "uplinkDataKey", "uplinkChunkSize",
+		"hysteria_version", "hysteria_auth", "hysteria_udp_idle_timeout", "obfs", "obfs-password", "obfsPassword", "mport",
+	} {
+		if !inboundValueEmpty(target[key]) {
+			continue
+		}
+		if inboundValueEmpty(source[key]) {
+			continue
+		}
+		target[key] = source[key]
+	}
+	if stringValue(target["tls"]) == "none" && stringValue(source["tls"]) != "" && stringValue(source["tls"]) != "none" {
+		target["tls"] = source["tls"]
+	}
+}
+
+func inboundValueEmpty(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case string:
+		cleaned := strings.TrimSpace(typed)
+		return cleaned == "" || cleaned == "none"
+	case []string:
+		return len(typed) == 0
+	case []any:
+		return len(typed) == 0
+	default:
+		return false
+	}
+}
+
+func copyInbound(inbound ResolvedInbound) ResolvedInbound {
+	result := make(ResolvedInbound, len(inbound)+8)
+	for key, value := range inbound {
+		result[key] = value
+	}
+	return result
+}
+
+func normalizedHostSecurity(value string) string {
+	cleaned := strings.TrimSpace(strings.ToLower(value))
+	if cleaned == "" || cleaned == "none" || cleaned == "default" || cleaned == "inbound_default" || cleaned == "inbound-default" {
+		return ""
+	}
+	return cleaned
+}
+
+func nonDefaultHostFingerprint(value string) string {
+	return nonDefaultHostText(value)
+}
+
+func nonDefaultHostText(value string) string {
+	cleaned := strings.TrimSpace(value)
+	switch strings.ToLower(cleaned) {
+	case "", "none", "default", "inbound_default", "inbound-default":
+		return ""
+	default:
+		return cleaned
+	}
+}
+
+func firstHostOverride(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	first := firstCSV(*value)
+	if first == "" {
+		return fallback
+	}
+	return first
+}
+
+func hostOverrideList(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	cleaned := strings.TrimSpace(*value)
+	if cleaned == "" {
+		return fallback
+	}
+	return cleaned
+}
+
+func configFormatVariables(item ConfigLinkUser) map[string]string {
+	now := time.Now().UTC()
+	dataLimit := "\u221e"
+	dataLeft := "\u221e"
+	if item.DataLimit != nil && *item.DataLimit > 0 {
+		dataLimit = formatBytes(*item.DataLimit)
+		remaining := *item.DataLimit - item.UsedTraffic
+		if remaining < 0 {
+			remaining = 0
+		}
+		dataLeft = formatBytes(remaining)
+	}
+
+	daysLeft := "\u221e"
+	timeLeft := "\u221e"
+	expireDate := "\u221e"
+	jalaliExpireDate := "\u221e"
+	if item.Status == "on_hold" {
+		if item.OnHoldExpireDuration != nil && *item.OnHoldExpireDuration >= 0 {
+			duration := *item.OnHoldExpireDuration
+			daysLeft = strconv.FormatInt(duration/(24*60*60), 10)
+			timeLeft = formatSubscriptionTimeLeft(duration)
+			expireDate = "-"
+			jalaliExpireDate = "-"
+		}
+	} else if item.Expire != nil && *item.Expire >= 0 {
+		expire := time.Unix(*item.Expire, 0).UTC()
+		expireDate = expire.Format("2006-01-02")
+		jalaliExpireDate = formatJalaliDate(expire)
+		secondsLeft := *item.Expire - now.Unix()
+		if secondsLeft > 0 {
+			days := int64(expire.Sub(now).Hours()/24) + 1
+			if days < 0 {
+				days = 0
+			}
+			daysLeft = strconv.FormatInt(days, 10)
+			timeLeft = formatSubscriptionTimeLeft(secondsLeft)
+		} else {
+			daysLeft = "0"
+			timeLeft = "0"
+		}
+	}
+
+	statusEmoji := map[string]string{
+		"active":   "\u2705",
+		"expired":  "\u231b\ufe0f",
+		"limited":  "\U0001faab",
+		"disabled": "\u274c",
+		"on_hold":  "\U0001f50c",
+	}[item.Status]
+	statusText := map[string]string{
+		"active":   "Active",
+		"expired":  "Expired",
+		"limited":  "Limited",
+		"disabled": "Disabled",
+		"on_hold":  "On hold",
+	}[item.Status]
+
+	values := map[string]string{
+		"id":                 strconv.FormatInt(item.ID, 10),
+		"user_id":            strconv.FormatInt(item.ID, 10),
+		"username":           item.Username,
+		"status":             item.Status,
+		"used_traffic":       strconv.FormatInt(item.UsedTraffic, 10),
+		"USERNAME":           item.Username,
+		"DATA_USAGE":         formatBytes(item.UsedTraffic),
+		"DATA_LIMIT":         dataLimit,
+		"DATA_LEFT":          dataLeft,
+		"REMAINING_DATA":     dataLeft,
+		"DAYS_LEFT":          daysLeft,
+		"EXPIRE_DATE":        expireDate,
+		"JALALI_EXPIRE_DATE": jalaliExpireDate,
+		"TIME_LEFT":          timeLeft,
+		"STATUS_EMOJI":       statusEmoji,
+		"STATUS_TEXT":        statusText,
+		"SERVER_IPV6":        "",
+	}
+	if strings.TrimSpace(item.ServerIP) != "" {
+		values["server_ip"] = strings.TrimSpace(item.ServerIP)
+		values["SERVER_IP"] = strings.TrimSpace(item.ServerIP)
+	}
+	if item.DataLimit != nil {
+		values["data_limit"] = strconv.FormatInt(*item.DataLimit, 10)
+	}
+	if item.Expire != nil {
+		values["expire"] = strconv.FormatInt(*item.Expire, 10)
+	}
+	return values
+}
+
+func cloneFormatVariables(values map[string]string) map[string]string {
+	result := make(map[string]string, len(values)+4)
+	for key, value := range values {
+		result[key] = value
+	}
+	return result
+}
+
+func configTransportName(inbound ResolvedInbound) string {
+	transport := strings.TrimSpace(stringValue(inbound["network"]))
+	if transport == "" {
+		return "TCP"
+	}
+	return strings.ToUpper(transport)
+}
+
+func formatSubscriptionTimeLeft(secondsLeft int64) string {
+	if secondsLeft <= 0 {
+		return "\u221e"
+	}
+	minutes := secondsLeft / 60
+	seconds := secondsLeft % 60
+	hours := minutes / 60
+	minutes = minutes % 60
+	days := hours / 24
+	hours = hours % 24
+	months := days / 30
+	days = days % 30
+	parts := make([]string, 0, 4)
+	if months > 0 {
+		parts = append(parts, strconv.FormatInt(months, 10)+"m")
+	}
+	if days > 0 {
+		parts = append(parts, strconv.FormatInt(days, 10)+"d")
+	}
+	if hours > 0 && days < 7 {
+		parts = append(parts, strconv.FormatInt(hours, 10)+"h")
+	}
+	if minutes > 0 && months == 0 && days == 0 {
+		parts = append(parts, strconv.FormatInt(minutes, 10)+"m")
+	}
+	if seconds > 0 && months == 0 && days == 0 {
+		parts = append(parts, strconv.FormatInt(seconds, 10)+"s")
+	}
+	if len(parts) == 0 {
+		return "\u221e"
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatJalaliDate(value time.Time) string {
+	year, month, day := gregorianToJalali(value.Date())
+	return fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+}
+
+func gregorianToJalali(gy int, gm time.Month, gd int) (int, int, int) {
+	gDaysInMonth := []int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	jDaysInMonth := []int{31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29}
+	gy -= 1600
+	gmInt := int(gm) - 1
+	gd--
+	gDayNo := 365*gy + (gy+3)/4 - (gy+99)/100 + (gy+399)/400
+	for i := 0; i < gmInt; i++ {
+		gDayNo += gDaysInMonth[i]
+	}
+	if gmInt > 1 && ((gy+1600)%4 == 0 && ((gy+1600)%100 != 0 || (gy+1600)%400 == 0)) {
+		gDayNo++
+	}
+	gDayNo += gd
+	jDayNo := gDayNo - 79
+	jNP := jDayNo / 12053
+	jDayNo %= 12053
+	jy := 979 + 33*jNP + 4*(jDayNo/1461)
+	jDayNo %= 1461
+	if jDayNo >= 366 {
+		jy += (jDayNo - 1) / 365
+		jDayNo = (jDayNo - 1) % 365
+	}
+	jm := 0
+	for jm < 11 && jDayNo >= jDaysInMonth[jm] {
+		jDayNo -= jDaysInMonth[jm]
+		jm++
+	}
+	return jy, jm + 1, jDayNo + 1
+}
+
+func applyFormat(value string, variables map[string]string) string {
+	result := value
+	for key, replacement := range variables {
+		result = strings.ReplaceAll(result, "{"+key+"}", replacement)
+	}
+	return result
+}
+
+func applyWildcard(value string, salt string) string {
+	if !strings.Contains(value, "*") {
+		return value
+	}
+	return strings.ReplaceAll(value, "*", salt)
+}
+
+func runtimeProxySettings(settings map[string]any, protocol string, credentialKey string, flow string, masks map[string][]byte) (map[string]any, error) {
+	data := make(map[string]any, len(settings)+3)
+	for key, value := range settings {
+		data[key] = value
+	}
+	if value, ok := data["ivCheck"]; ok {
+		if _, exists := data["iv_check"]; !exists {
+			data["iv_check"] = value
+		}
+	}
+
+	flowValue := flow
+	if flowValue == "" {
+		flowValue = stringValue(data["flow"])
+	}
+	delete(data, "flow")
+
+	normalizedKey := ""
+	if credentialKey != "" {
+		key, err := normalizeCredentialKey(credentialKey)
+		if err != nil {
+			return nil, err
+		}
+		normalizedKey = key
+	}
+
+	switch protocol {
+	case "vmess", "vless":
+		if id, ok := sanitizeUUID(firstNonEmptyString(data["id"], data["uuid"])); ok {
+			data["id"] = id
+		} else if normalizedKey != "" {
+			id, err := keyToUUID(normalizedKey, nil)
+			if err != nil {
+				return nil, err
+			}
+			data["id"] = id
+		} else {
+			return nil, fmt.Errorf("UUID is required for proxy type %s", protocol)
+		}
+	case "trojan", "shadowsocks", "hysteria", "ssh":
+		if stringValue(data["password"]) == "" {
+			if normalizedKey != "" {
+				data["password"] = keyToPassword(normalizedKey, protocol)
+			} else {
+				password, err := randomCredentialPassword()
+				if err != nil {
+					return nil, err
+				}
+				data["password"] = password
+			}
+		}
+		if protocol == "hysteria" {
+			if stringValue(data["auth"]) == "" {
+				data["auth"] = stringValue(data["password"])
+			}
+			delete(data, "password")
+			delete(data, "method")
+			delete(data, "iv_check")
+			break
+		}
+		if protocol == "ssh" {
+			delete(data, "method")
+			delete(data, "iv_check")
+		}
+		if protocol == "shadowsocks" {
+			if stringValue(data["method"]) == "" {
+				data["method"] = defaultShadowsocksMethod
+			}
+			if _, ok := data["iv_check"]; !ok {
+				data["iv_check"] = false
+			}
+		}
+	}
+
+	if protocol == "vless" {
+		if normalized := normalizeFlowForServer(flowValue); normalized != "" {
+			data["flow"] = normalized
+		}
+	}
+	return data, nil
+}
+
+func RuntimeProxySettings(settings map[string]any, protocol string, credentialKey string, flow string, masks map[string][]byte) (map[string]any, error) {
+	return runtimeProxySettings(settings, protocol, credentialKey, flow, masks)
+}
+
+func RuntimeShadowsocksSettings(settings map[string]any, inboundSettings map[string]any) map[string]any {
+	data := make(map[string]any, len(settings))
+	for key, value := range settings {
+		data[key] = value
+	}
+	method := firstNonEmptyString(inboundSettings["method"], data["method"], defaultShadowsocksMethod)
+	if strings.HasPrefix(method, "2022-") {
+		data["password"] = shadowsocks2022Password(stringValue(data["password"]), method)
+		delete(data, "method")
+		delete(data, "iv_check")
+		return data
+	}
+	data["method"] = method
+	return data
+}
+
+func shadowsocks2022Password(password string, method string) string {
+	keyLength := 32
+	if strings.Contains(method, "aes-128") {
+		keyLength = 16
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(password); err == nil && len(decoded) == keyLength {
+		return password
+	}
+	sum := sha256.Sum256([]byte(password))
+	return base64.StdEncoding.EncodeToString(sum[:keyLength])
+}
+
+func normalizeCredentialKey(value string) (string, error) {
+	cleaned := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(value, "-", "")))
+	if len(cleaned) != 32 {
+		return "", fmt.Errorf("credential key must be a 32 character hex string")
+	}
+	if _, err := hex.DecodeString(cleaned); err != nil {
+		return "", fmt.Errorf("credential key must be a 32 character hex string")
+	}
+	return cleaned, nil
+}
+
+func keyToUUID(key string, mask []byte) (string, error) {
+	keyBytes, err := hex.DecodeString(key)
+	if err != nil {
+		return "", err
+	}
+	if len(mask) > 0 {
+		if len(mask) != len(keyBytes) {
+			return "", fmt.Errorf("uuid mask must be 16 bytes")
+		}
+		for i := range keyBytes {
+			keyBytes[i] = keyBytes[i] ^ mask[i]
+		}
+	}
+	return formatUUIDBytes(keyBytes), nil
+}
+
+func keyToPassword(key string, label string) string {
+	sum := sha256.Sum256([]byte(label + ":" + key))
+	return hex.EncodeToString(sum[:])[:32]
+}
+
+func randomCredentialPassword() (string, error) {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buffer), nil
+}
+
+func sanitizeUUID(value string) (string, bool) {
+	cleaned := strings.TrimSpace(value)
+	if cleaned == "" {
+		return "", false
+	}
+	if result, ok := normalizeUUIDHex(strings.ReplaceAll(cleaned, "-", "")); ok {
+		return result, true
+	}
+	filtered := strings.Builder{}
+	for _, ch := range cleaned {
+		if (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F') {
+			filtered.WriteRune(ch)
+		}
+	}
+	return normalizeUUIDHex(filtered.String())
+}
+
+func normalizeUUIDHex(value string) (string, bool) {
+	cleaned := strings.ToLower(value)
+	if len(cleaned) != 32 {
+		return "", false
+	}
+	if _, err := hex.DecodeString(cleaned); err != nil {
+		return "", false
+	}
+	return cleaned[:8] + "-" + cleaned[8:12] + "-" + cleaned[12:16] + "-" + cleaned[16:20] + "-" + cleaned[20:], true
+}
+
+func formatUUIDBytes(value []byte) string {
+	cleaned := hex.EncodeToString(value)
+	return cleaned[:8] + "-" + cleaned[8:12] + "-" + cleaned[12:16] + "-" + cleaned[16:20] + "-" + cleaned[20:]
+}
+
+func normalizeFlowForServer(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized != "xtls-rprx-vision" && normalized != "xtls-rprx-vision-udp443" {
+		return ""
+	}
+	return strings.TrimSuffix(normalized, "-udp443")
+}
+
+func buildShareLink(remark string, address string, inbound ResolvedInbound, settings map[string]any) (string, error) {
+	netValue := stringValue(inbound["network"])
+	path := stringValue(inbound["path"])
+	multiMode := boolValue(inbound["multiMode"])
+	if netValue == "grpc" || netValue == "gun" {
+		oldPath := path
+		if multiMode {
+			path = grpcMultiPath(oldPath)
+		} else {
+			path = grpcGunPath(oldPath)
+		}
+		if strings.HasPrefix(oldPath, "/") {
+			path = percentEncode(path, "-_.!~*'()", false)
+		}
+	}
+
+	switch normalizeProxyProtocol(stringValue(inbound["protocol"])) {
+	case "vmess":
+		return vmessShareLink(remark, address, path, inbound, settings), nil
+	case "vless":
+		return vlessShareLink(remark, formatIPForURL(address), path, inbound, settings), nil
+	case "trojan":
+		return trojanShareLink(remark, formatIPForURL(address), path, inbound, settings), nil
+	case "shadowsocks":
+		clientNetwork := strings.ToLower(strings.TrimSpace(netValue))
+		if !shadowsocksClientNetworkSupported(clientNetwork) {
+			return "", fmt.Errorf("Shadowsocks transport %q cannot be represented safely by current v2rayN/v2rayNG clients; migrate the inbound to raw, WebSocket, gRPC, HTTPUpgrade, XHTTP, or mKCP", netValue)
+		}
+		return shadowsocksShareLink(remark, formatIPForURL(address), inbound, settings), nil
+	case "hysteria":
+		return hysteriaShareLink(remark, formatIPForURL(address), inbound, settings)
+	case "ssh":
+		return sshShareLink(remark, formatIPForURL(address), inbound, settings), nil
+	default:
+		return "", nil
+	}
+}
+
+func vmessShareLink(remark string, address string, path string, inbound ResolvedInbound, settings map[string]any) string {
+	payload := map[string]any{
+		"add":  address,
+		"aid":  "0",
+		"host": stringValue(inbound["host"]),
+		"id":   stringValue(settings["id"]),
+		"net":  stringValue(inbound["network"]),
+		"path": path,
+		"port": inbound["port"],
+		"ps":   remark,
+		"scy":  "auto",
+		"tls":  stringValue(inbound["tls"]),
+		"type": stringValue(inbound["header_type"]),
+		"v":    "2",
+	}
+	if fs := stringValue(inbound["fragment_setting"]); fs != "" {
+		payload["fragment"] = fs
+	}
+	if ns := stringValue(inbound["noise_setting"]); ns != "" {
+		payload["noise"] = ns
+	}
+	if finalMask := mapValue(inbound["finalmask"]); len(finalMask) > 0 {
+		payload["fm"] = finalMask
+	}
+	tls := stringValue(inbound["tls"])
+	if tls == "tls" {
+		payload["sni"] = stringValue(inbound["sni"])
+		payload["fp"] = clientTLSFingerprint(inbound)
+		if cipherSuites := stringValue(inbound["cipherSuites"]); cipherSuites != "" {
+			payload["cs"] = cipherSuites
+		}
+		if alpn := stringValue(inbound["alpn"]); alpn != "" {
+			payload["alpn"] = alpn
+		}
+		if ech := firstNonEmptyString(inbound["ech"], inbound["echConfigList"]); ech != "" {
+			payload["ech"] = ech
+		}
+		if vcn := firstNonEmptyString(inbound["vcn"], inbound["verifyPeerCertByName"]); vcn != "" {
+			payload["vcn"] = vcn
+		}
+		if pin := firstNonEmptyString(inbound["pinSHA256"], inbound["pinnedPeerCertSha256"]); pin != "" {
+			payload["pinSHA256"] = pin
+		}
+		if truthy(inbound["ais"]) {
+			payload["allowInsecure"] = 1
+		}
+	} else if tls == "reality" {
+		payload["sni"] = stringValue(inbound["sni"])
+		payload["fp"] = stringValue(inbound["fp"])
+		payload["pbk"] = stringValue(inbound["pbk"])
+		payload["sid"] = stringValue(inbound["sid"])
+		if spx := stringValue(inbound["spx"]); spx != "" {
+			payload["spx"] = spx
+		}
+		if pqv := stringValue(inbound["pqv"]); pqv != "" {
+			payload["pqv"] = pqv
+		}
+	}
+
+	netValue := stringValue(inbound["network"])
+	switch netValue {
+	case "kcp":
+		copyOptional(payload, "mtu", inbound)
+		copyOptional(payload, "tti", inbound)
+	case "grpc":
+		if boolValue(inbound["multiMode"]) {
+			payload["mode"] = "multi"
+		} else {
+			payload["mode"] = "gun"
+		}
+	case "splithttp", "xhttp":
+		extra := xhttpShareExtraMap(inbound)
+		if mode, ok := inbound["mode"]; ok {
+			payload["type"] = mode
+		}
+		if keepAlive, ok := inbound["keepAlivePeriod"]; ok && intValue(keepAlive) > 0 {
+			extra["keepAlivePeriod"] = keepAlive
+		}
+		if len(extra) > 0 {
+			payload["extra"] = extra
+		}
+	case "ws":
+		if heartbeat, ok := inbound["heartbeatPeriod"]; ok && truthy(heartbeat) {
+			payload["heartbeatPeriod"] = heartbeat
+		}
+	}
+
+	encoded, _ := json.Marshal(payload)
+	return "vmess://" + base64.StdEncoding.EncodeToString(encoded)
+}
+
+func vlessShareLink(remark string, address string, path string, inbound ResolvedInbound, settings map[string]any) string {
+	params := []queryParam{
+		{"security", stringValue(inbound["tls"])},
+		{"type", stringValue(inbound["network"])},
+		{"headerType", firstNonEmptyString(inbound["header_type"], "none")},
+	}
+	tls := stringValue(inbound["tls"])
+	netValue := stringValue(inbound["network"])
+	headerType := stringValue(inbound["header_type"])
+	flow := firstNonEmptyString(settings["flow"], inbound["flow"])
+	if vlessFlowAllowed(flow, stringValue(inbound["encryption"]), netValue, tls, headerType) {
+		params = append(params, queryParam{"flow", flow})
+	}
+	if encryption := stringValue(inbound["encryption"]); encryption != "" {
+		params = append(params, queryParam{"encryption", encryption})
+	} else {
+		params = append(params, queryParam{"encryption", "none"})
+	}
+	params = appendNetworkParams(params, netValue, path, inbound)
+	params = appendTLSParams(params, tls, inbound)
+	params = appendMaskParams(params, inbound)
+	params = appendFinalMaskParam(params, inbound)
+	return "vless://" + stringValue(settings["id"]) + "@" + address + ":" + portString(inbound["port"]) + "?" + urlencodeOrdered(params) + "#" + percentEncode(remark, "/", false)
+}
+
+func trojanShareLink(remark string, address string, path string, inbound ResolvedInbound, settings map[string]any) string {
+	params := []queryParam{
+		{"security", stringValue(inbound["tls"])},
+		{"type", stringValue(inbound["network"])},
+		{"headerType", firstNonEmptyString(inbound["header_type"], "none")},
+	}
+	tls := stringValue(inbound["tls"])
+	netValue := stringValue(inbound["network"])
+	params = appendNetworkParams(params, netValue, path, inbound)
+	params = appendTLSParams(params, tls, inbound)
+	params = appendMaskParams(params, inbound)
+	params = appendFinalMaskParam(params, inbound)
+	return "trojan://" + percentEncode(stringValue(settings["password"]), "", false) + "@" + address + ":" + portString(inbound["port"]) + "?" + urlencodeOrdered(params) + "#" + percentEncode(remark, "/", false)
+}
+
+func shadowsocksShareLink(remark string, address string, inbound ResolvedInbound, settings map[string]any) string {
+	inboundSettings := mapValue(inbound["settings"])
+	method := firstNonEmptyString(inboundSettings["method"], settings["method"], defaultShadowsocksMethod)
+	settings = RuntimeShadowsocksSettings(settings, inboundSettings)
+	if shadowsocksNeedsV2rayNLink(inbound) {
+		return shadowsocksV2rayNShareLink(remark, address, method, inbound, inboundSettings, settings)
+	}
+	var userInfo string
+	if strings.HasPrefix(method, "2022-") {
+		userInfo = queryEscape(method) + ":" + queryEscape(stringValue(inboundSettings["password"])) + ":" + queryEscape(stringValue(settings["password"]))
+	} else {
+		userInfo = base64.RawURLEncoding.EncodeToString([]byte(method + ":" + stringValue(settings["password"])))
+	}
+	base := "ss://" + userInfo + "@" + address + ":" + portString(inbound["port"])
+	network := strings.ToLower(firstNonEmptyString(inbound["network"], "tcp"))
+	if (network == "tcp" || network == "raw") && strings.EqualFold(stringValue(inbound["header_type"]), "http") {
+		plugin := "obfs-local;obfs=http;obfs-host=" + joinStringList(inbound["host"])
+		// SIP002 requires the slash before a plugin query.
+		base += "/?" + urlencodeOrdered([]queryParam{{"plugin", plugin}})
+	}
+	return base + "#" + percentEncode(remark, "/", false)
+}
+
+func shadowsocksNeedsV2rayNLink(inbound ResolvedInbound) bool {
+	security := strings.ToLower(stringValue(inbound["tls"]))
+	if security != "" && security != "none" {
+		return true
+	}
+	if len(configLinkFinalMask(inbound)) > 0 {
+		return true
+	}
+	if boolValue(inbound["mux_enable"]) {
+		return true
+	}
+	network := strings.ToLower(firstNonEmptyString(inbound["network"], "tcp"))
+	if network != "tcp" && network != "raw" {
+		return true
+	}
+	header := strings.ToLower(stringValue(inbound["header_type"]))
+	return header != "" && header != "none" && header != "http"
+}
+
+func shadowsocksClientNetworkSupported(network string) bool {
+	switch strings.ToLower(strings.TrimSpace(network)) {
+	case "", "tcp", "raw", "ws", "grpc", "gun", "httpupgrade", "xhttp", "splithttp", "kcp":
+		return true
+	default:
+		return false
+	}
+}
+
+func shadowsocksV2rayNShareLink(remark, address, method string, inbound ResolvedInbound, inboundSettings, settings map[string]any) string {
+	password := stringValue(settings["password"])
+	if strings.HasPrefix(method, "2022-") {
+		password = stringValue(inboundSettings["password"]) + ":" + password
+	}
+	network := strings.ToLower(firstNonEmptyString(inbound["network"], "tcp"))
+	switch network {
+	case "tcp":
+		network = "raw"
+	case "gun":
+		network = "grpc"
+	case "splithttp":
+		network = "xhttp"
+	}
+	path := stringValue(inbound["path"])
+	if network == "grpc" {
+		if boolValue(inbound["multiMode"]) {
+			path = grpcMultiPath(path)
+		} else {
+			path = grpcGunPath(path)
+		}
+	}
+	finalMask, _ := json.Marshal(shadowsocksClientFinalMask(inbound))
+	profile := outboundsubapp.V2rayNShadowsocksProfile{
+		ConfigType:     3,
+		ConfigVersion:  4,
+		Remarks:        remark,
+		Address:        strings.Trim(address, "[]"),
+		Port:           intValue(inbound["port"]),
+		Password:       password,
+		Network:        network,
+		StreamSecurity: stringValue(inbound["tls"]),
+		SNI:            firstStringList(inbound["sni"]),
+		ALPN:           joinStringList(inbound["alpn"]),
+		Fingerprint:    clientTLSFingerprint(inbound),
+		PublicKey:      firstNonEmptyString(inbound["pbk"], inbound["publicKey"]),
+		ShortID:        firstNonEmptyString(inbound["sid"], firstStringList(inbound["sids"])),
+		SpiderX:        stringValue(inbound["spx"]),
+		MLDSA65Verify:  stringValue(inbound["pqv"]),
+		CipherSuites:   stringValue(inbound["cipherSuites"]),
+		MuxEnabled:     boolValue(inbound["mux_enable"]),
+		CertSHA:        firstNonEmptyString(inbound["pinSHA256"], inbound["pinnedPeerCertSha256"]),
+		ECHConfigList:  firstNonEmptyString(inbound["ech"], inbound["echConfigList"]),
+		VerifyPeerCertByName: firstNonEmptyString(
+			inbound["vcn"], inbound["verifyPeerCertByName"],
+		),
+		ProtocolExtra: outboundsubapp.V2rayNShadowsocksProtocolExtra{Method: method},
+		TransportExtra: outboundsubapp.V2rayNShadowsocksTransportExtra{
+			Host: joinStringList(inbound["host"]), Path: path,
+		},
+	}
+	if truthy(inbound["ais"]) {
+		profile.AllowInsecure = "true"
+	}
+	if len(finalMask) > 2 {
+		profile.FinalMask = string(finalMask)
+	}
+	switch network {
+	case "raw":
+		profile.TransportExtra.RawHeaderType = stringValue(inbound["header_type"])
+	case "grpc":
+		profile.TransportExtra.GRPCAuthority = joinStringList(inbound["host"])
+		profile.TransportExtra.GRPCService = path
+		if boolValue(inbound["multiMode"]) {
+			profile.TransportExtra.GRPCMode = "multi"
+		}
+	case "kcp":
+		profile.TransportExtra.KCPHeaderType = stringValue(inbound["header_type"])
+		profile.TransportExtra.KCPSeed = stringValue(inbound["path"])
+		profile.TransportExtra.KCPMTU = intValue(inbound["mtu"])
+		profile.TransportExtra.KCPTTI = intValue(inbound["tti"])
+	case "ws":
+		profile.TransportExtra.Heartbeat = intValue(inbound["heartbeatPeriod"])
+	case "xhttp":
+		profile.TransportExtra.XHTTPMode = stringValue(inbound["mode"])
+		if extra := xhttpShareExtraMap(inbound); len(extra) > 0 {
+			encoded, _ := json.Marshal(extra)
+			profile.TransportExtra.XHTTPExtra = string(encoded)
+		}
+	}
+	return outboundsubapp.EncodeV2rayNShadowsocks(profile)
+}
+
+func shadowsocksClientFinalMask(inbound ResolvedInbound) map[string]any {
+	finalMask := configLinkFinalMask(inbound)
+	if len(finalMask) == 0 || !strings.EqualFold(stringValue(inbound["network"]), "kcp") {
+		return finalMask
+	}
+	udp := listAny(finalMask["udp"])
+	transportIndex := -1
+	header := normalizeShareMKCPHeader(stringValue(inbound["header_type"]))
+	headerFound := header == "none" || header == "invalid"
+	for index, item := range udp {
+		transport, role := v2rayMKCPMaskRole(mapValue(item), true)
+		if transport && transportIndex < 0 {
+			transportIndex = index
+		}
+		if role == "header-"+header {
+			headerFound = true
+		}
+	}
+	insert := func(index int, item any) {
+		items := make([]any, 0)
+		items = append(items, udp[:index]...)
+		items = append(items, item)
+		items = append(items, udp[index:]...)
+		udp = items
+	}
+	if transportIndex < 0 {
+		transportIndex = 0
+		if len(udp) > 0 {
+			typeName := strings.ToLower(stringValue(mapValue(udp[0])["type"]))
+			if typeName == "realm" || typeName == "xicmp" {
+				transportIndex = 1
+			}
+		}
+		insert(transportIndex, map[string]any{"type": "mkcp-legacy", "settings": map[string]any{
+			"header": "", "value": stringValue(inbound["path"]),
+		}})
+	}
+	if !headerFound {
+		value := ""
+		if header == "dns" {
+			value = joinStringList(inbound["host"])
+		}
+		insert(transportIndex+1, map[string]any{"type": "mkcp-legacy", "settings": map[string]any{"header": header, "value": value}})
+	}
+	finalMask["udp"] = udp
+	return finalMask
+}
+
+func hysteriaShareLink(remark string, address string, inbound ResolvedInbound, settings map[string]any) (string, error) {
+	auth := firstNonEmptyString(settings["auth"], settings["password"])
+	if version := intValue(firstNonEmptyValue(inbound["hysteria_version"], settings["version"])); version != 0 && version != 2 {
+		return "", fmt.Errorf("Hysteria share links require version 2; persisted version %d cannot be converted safely", version)
+	}
+	geckoPacketSize := stringValue(inbound["hysteria_gecko_packet_size"])
+	if geckoPacketSize != "" && geckoPacketSize != "512-1200" {
+		return "", fmt.Errorf("Hysteria Gecko packet size %q cannot be represented safely in the standard Hysteria 2 URI", geckoPacketSize)
+	}
+	params := make([]queryParam, 0, 12)
+	// fp, alpn, vcn and pcs are Next/Xray TLS extensions, not native
+	// Hysteria 2 URI parameters. Keep them for Xray-aware consumers only.
+	if fp := stringValue(inbound["fp"]); fp != "" {
+		params = append(params, queryParam{"fp", fp})
+	}
+	if alpn := stringValue(inbound["alpn"]); alpn != "" {
+		params = append(params, queryParam{"alpn", alpn})
+	}
+	if ech := firstNonEmptyString(inbound["ech"], inbound["echConfigList"]); ech != "" {
+		params = append(params, queryParam{"ech", ech})
+	}
+	if sni := firstNonEmptyString(inbound["sni"], inbound["serverName"]); sni != "" {
+		params = append(params, queryParam{"sni", sni})
+	}
+	if vcn := firstNonEmptyString(inbound["vcn"], inbound["verifyPeerCertByName"]); vcn != "" {
+		params = append(params, queryParam{"vcn", vcn})
+	}
+	if pin := firstNonEmptyString(inbound["pinSHA256"], inbound["pinnedPeerCertSha256"]); pin != "" {
+		pins := splitCommaLines(pin)
+		if len(pins) != 1 {
+			return "", fmt.Errorf("standard Hysteria 2 links support exactly one pinSHA256 certificate pin; Xray CSV pins cannot be represented safely")
+		}
+		params = append(params, queryParam{"pinSHA256", hysteriaPinHex(pins[0])})
+	}
+	if truthy(firstNonEmptyValue(inbound["ais"], inbound["allowinsecure"])) {
+		params = append(params, queryParam{"insecure", 1})
+	}
+	obfs := firstNonEmptyString(inbound["obfs"], inbound["hysteria_obfs"])
+	if geckoPacketSize != "" {
+		obfs = "gecko"
+	}
+	if obfs != "" {
+		params = append(params, queryParam{"obfs", obfs})
+	}
+	if obfsPassword := firstNonEmptyString(inbound["obfs-password"], inbound["obfsPassword"], inbound["hysteria_obfs_password"]); obfsPassword != "" {
+		params = append(params, queryParam{"obfs-password", obfsPassword})
+	}
+	authorityPort := portString(inbound["port"])
+	if mport := firstNonEmptyString(inbound["mport"], inbound["hysteria_mport"]); mport != "" {
+		primaryPort, err := strconv.Atoi(authorityPort)
+		if err != nil || primaryPort < 1 || primaryPort > 65535 {
+			return "", fmt.Errorf("invalid Hysteria 2 primary port %q", authorityPort)
+		}
+		combined := mport
+		if !hysteriaPortExpressionContains(mport, primaryPort) {
+			combined = authorityPort + "," + mport
+		}
+		_, expression, err := parseHysteriaPortExpression(combined)
+		if err != nil {
+			return "", err
+		}
+		authorityPort = expression
+	}
+	authority := address + ":" + authorityPort
+	if auth != "" {
+		authority = percentEncode(auth, "", false) + "@" + authority
+	}
+	link := "hysteria2://" + authority + "/"
+	if query := urlencodeOrdered(params); query != "" {
+		link += "?" + query
+	}
+	return link + "#" + percentEncode(remark, "/", false), nil
+}
+
+func sshShareLink(remark string, address string, inbound ResolvedInbound, settings map[string]any) string {
+	userinfo := url.UserPassword(stringValue(settings["username"]), stringValue(settings["password"])).String()
+	return "ssh://" + userinfo + "@" + address + ":" + portString(inbound["port"]) + "#" + percentEncode(remark, "/", false)
+}
+
+func parseHysteriaPortExpression(raw string) (int, string, error) {
+	expression := strings.TrimSpace(raw)
+	if expression == "" || strings.ContainsAny(expression, " \t\r\n") {
+		return 0, "", fmt.Errorf("invalid Hysteria 2 port expression %q", raw)
+	}
+	firstPort := 0
+	for _, item := range strings.Split(expression, ",") {
+		if item == "" {
+			return 0, "", fmt.Errorf("invalid Hysteria 2 port expression %q", raw)
+		}
+		fromText, toText, ranged := strings.Cut(item, "-")
+		if ranged && strings.Contains(toText, "-") {
+			return 0, "", fmt.Errorf("invalid Hysteria 2 port range %q", item)
+		}
+		from, fromErr := strconv.Atoi(fromText)
+		to := from
+		toErr := fromErr
+		if ranged {
+			to, toErr = strconv.Atoi(toText)
+		}
+		if fromErr != nil || toErr != nil || from < 1 || from > 65535 || to < from || to > 65535 {
+			return 0, "", fmt.Errorf("invalid Hysteria 2 port item %q", item)
+		}
+		if firstPort == 0 {
+			firstPort = from
+		}
+	}
+	return firstPort, expression, nil
+}
+
+func hysteriaPortExpressionContains(raw string, port int) bool {
+	for _, item := range strings.Split(strings.TrimSpace(raw), ",") {
+		fromText, toText, ranged := strings.Cut(item, "-")
+		from, fromErr := strconv.Atoi(fromText)
+		to := from
+		toErr := fromErr
+		if ranged {
+			to, toErr = strconv.Atoi(toText)
+		}
+		if fromErr == nil && toErr == nil && port >= from && port <= to {
+			return true
+		}
+	}
+	return false
+}
+
+func parseHysteria2ShareURL(link string) (*url.URL, error) {
+	schemeEnd := strings.Index(link, "://")
+	if schemeEnd < 0 {
+		return nil, fmt.Errorf("invalid Hysteria 2 URI")
+	}
+	scheme := strings.ToLower(link[:schemeEnd])
+	if scheme != "hysteria2" && scheme != "hy2" {
+		return nil, fmt.Errorf("not a Hysteria 2 URI")
+	}
+	authorityStart := schemeEnd + 3
+	rest := link[authorityStart:]
+	authorityLength := len(rest)
+	if index := strings.IndexAny(rest, "/?#"); index >= 0 {
+		authorityLength = index
+	}
+	authority := rest[:authorityLength]
+	at := strings.LastIndex(authority, "@")
+	hostPort := authority
+	userinfoPrefix := ""
+	if at >= 0 {
+		hostPort = authority[at+1:]
+		userinfoPrefix = authority[:at+1]
+	}
+	hostOnly := hostPort
+	portExpression := "443"
+	if strings.HasPrefix(hostPort, "[") {
+		closeBracket := strings.Index(hostPort, "]")
+		if closeBracket < 0 {
+			return nil, fmt.Errorf("invalid bracketed Hysteria 2 address")
+		}
+		hostOnly = hostPort[:closeBracket+1]
+		if closeBracket+1 < len(hostPort) {
+			if hostPort[closeBracket+1] != ':' || closeBracket+2 >= len(hostPort) {
+				return nil, fmt.Errorf("invalid bracketed Hysteria 2 address")
+			}
+			portExpression = hostPort[closeBracket+2:]
+		}
+	} else if colon := strings.LastIndex(hostPort, ":"); colon >= 0 {
+		if strings.Contains(hostPort[:colon], ":") || colon+1 >= len(hostPort) {
+			return nil, fmt.Errorf("Hysteria 2 URI requires brackets around IPv6 addresses")
+		}
+		hostOnly = hostPort[:colon]
+		portExpression = hostPort[colon+1:]
+	}
+	if hostOnly == "" {
+		return nil, fmt.Errorf("Hysteria 2 URI host is required")
+	}
+	firstPort, expression, err := parseHysteriaPortExpression(portExpression)
+	if err != nil {
+		return nil, err
+	}
+	normalizedAuthority := userinfoPrefix + hostOnly + ":" + strconv.Itoa(firstPort)
+	normalized := link[:authorityStart] + normalizedAuthority + rest[authorityLength:]
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return nil, err
+	}
+	query := parsed.Query()
+	hopExpression := ""
+	if strings.ContainsAny(expression, ",-") {
+		hopExpression = expression
+	}
+	if legacy := query.Get("mport"); legacy != "" {
+		_, legacyExpression, legacyErr := parseHysteriaPortExpression(legacy)
+		if legacyErr != nil {
+			return nil, legacyErr
+		}
+		if hopExpression == "" {
+			hopExpression = legacyExpression
+		}
+	}
+	if strings.Contains(query.Get("pinSHA256"), ",") {
+		return nil, fmt.Errorf("standard Hysteria 2 pinSHA256 accepts exactly one certificate pin")
+	}
+	if hopExpression != "" {
+		query.Set("mport", hopExpression)
+		parsed.RawQuery = query.Encode()
+	}
+	return parsed, nil
+}
+
+func vlessFlowAllowed(flow string, encryption string, network string, security string, headerType string) bool {
+	flow = strings.ToLower(strings.TrimSpace(flow))
+	if flow != "xtls-rprx-vision" && flow != "xtls-rprx-vision-udp443" {
+		return false
+	}
+	if encryption = strings.TrimSpace(encryption); encryption != "" && encryption != "none" {
+		return true
+	}
+	return (security == "tls" || security == "reality") &&
+		(network == "tcp" || network == "raw") && headerType != "http"
+}
+
+func appendNetworkParams(params []queryParam, netValue string, path string, inbound ResolvedInbound) []queryParam {
+	host := stringValue(inbound["host"])
+	switch netValue {
+	case "grpc":
+		params = append(params, queryParam{"serviceName", path})
+		params = appendQueryParamIfNotEmpty(params, "authority", host)
+		if boolValue(inbound["multiMode"]) {
+			params = append(params, queryParam{"mode", "multi"})
+		} else {
+			params = append(params, queryParam{"mode", "gun"})
+		}
+	case "quic":
+		params = append(params, queryParam{"key", path})
+		params = appendQueryParamIfNotEmpty(params, "quicSecurity", host)
+	case "splithttp", "xhttp":
+		params = append(params, queryParam{"path", path})
+		params = appendQueryParamIfNotEmpty(params, "host", host)
+		if mode, ok := inbound["mode"]; ok {
+			params = append(params, queryParam{"mode", mode})
+		}
+		extra := xhttpShareExtraParams(inbound)
+		if len(extra) > 0 {
+			params = append(params, queryParam{"extra", pythonJSONDumpsOrdered(extra)})
+		}
+	case "kcp":
+		params = append(params, queryParam{"seed", path})
+		params = appendQueryParamIfNotEmpty(params, "host", host)
+		params = appendOptionalParam(params, "mtu", inbound)
+		params = appendOptionalParam(params, "tti", inbound)
+	case "ws":
+		params = append(params, queryParam{"path", path})
+		params = appendQueryParamIfNotEmpty(params, "host", host)
+		if heartbeat, ok := inbound["heartbeatPeriod"]; ok && truthy(heartbeat) {
+			params = append(params, queryParam{"heartbeatPeriod", heartbeat})
+		}
+	default:
+		params = append(params, queryParam{"path", path})
+		params = appendQueryParamIfNotEmpty(params, "host", host)
+	}
+	return params
+}
+
+func appendQueryParamIfNotEmpty(params []queryParam, key string, value any) []queryParam {
+	if stringValue(value) == "" {
+		return params
+	}
+	return append(params, queryParam{key, value})
+}
+
+func appendTLSParams(params []queryParam, tls string, inbound ResolvedInbound) []queryParam {
+	switch tls {
+	case "tls":
+		params = append(params, queryParam{"sni", stringValue(inbound["sni"])}, queryParam{"fp", clientTLSFingerprint(inbound)})
+		if cipherSuites := stringValue(inbound["cipherSuites"]); cipherSuites != "" {
+			params = append(params, queryParam{"cs", cipherSuites})
+		}
+		if alpn := stringValue(inbound["alpn"]); alpn != "" {
+			params = append(params, queryParam{"alpn", alpn})
+		}
+		if ech := firstNonEmptyString(inbound["ech"], inbound["echConfigList"]); ech != "" {
+			params = append(params, queryParam{"ech", ech})
+		}
+		if vcn := firstNonEmptyString(inbound["vcn"], inbound["verifyPeerCertByName"]); vcn != "" {
+			params = append(params, queryParam{"vcn", vcn})
+		}
+		if pin := firstNonEmptyString(inbound["pinSHA256"], inbound["pinnedPeerCertSha256"]); pin != "" {
+			params = append(params, queryParam{"pcs", pin})
+		}
+		if truthy(inbound["ais"]) {
+			params = append(params, queryParam{"allowInsecure", 1})
+		}
+	case "reality":
+		params = append(params,
+			queryParam{"sni", stringValue(inbound["sni"])},
+			queryParam{"fp", stringValue(inbound["fp"])},
+			queryParam{"pbk", stringValue(inbound["pbk"])},
+			queryParam{"sid", stringValue(inbound["sid"])},
+		)
+		if spx := stringValue(inbound["spx"]); spx != "" {
+			params = append(params, queryParam{"spx", spx})
+		}
+		if pqv := stringValue(inbound["pqv"]); pqv != "" {
+			params = append(params, queryParam{"pqv", pqv})
+		}
+	}
+	return params
+}
+
+func clientTLSFingerprint(inbound ResolvedInbound) string {
+	if stringValue(inbound["cipherSuites"]) != "" {
+		return "unsafe"
+	}
+	return stringValue(inbound["fp"])
+}
+
+func appendMaskParams(params []queryParam, inbound ResolvedInbound) []queryParam {
+	if fs := stringValue(inbound["fragment_setting"]); fs != "" {
+		params = append(params, queryParam{"fragment", fs})
+	}
+	if ns := stringValue(inbound["noise_setting"]); ns != "" {
+		params = append(params, queryParam{"noise", ns})
+	}
+	return params
+}
+
+func appendFinalMaskParam(params []queryParam, inbound ResolvedInbound) []queryParam {
+	finalMask := mapValue(inbound["finalmask"])
+	if len(finalMask) == 0 {
+		return params
+	}
+	encoded, err := json.Marshal(finalMask)
+	if err != nil {
+		return params
+	}
+	return append(params, queryParam{"fm", string(encoded)})
+}
+
+func resolveInbound(inbound map[string]any) (ResolvedInbound, error) {
+	protocol := normalizeProxyProtocol(stringValue(inbound["protocol"]))
+	resolved := ResolvedInbound{
+		"tag":         stringValue(inbound["tag"]),
+		"protocol":    protocol,
+		"port":        inbound["port"],
+		"network":     "tcp",
+		"tls":         "none",
+		"sni":         []string{},
+		"host":        []string{},
+		"path":        "",
+		"header_type": "",
+		"flow":        "",
+		"is_fallback": false,
+	}
+
+	settings := mapValue(inbound["settings"])
+	if protocol == "shadowsocks" {
+		resolved["settings"] = settings
+	}
+	if protocol == "vless" {
+		if encryption := stringValue(settings["encryption"]); encryption != "" {
+			resolved["encryption"] = encryption
+		}
+		if flow := firstNonEmptyString(settings["flow"]); flow != "" {
+			resolved["flow"] = flow
+		}
+	}
+	if protocol == "openvpn" {
+		applyOVResolvedSettings(resolved, inbound)
+		return resolved, nil
+	}
+	if protocol == "wireguard" || protocol == "amneziawg" {
+		resolved["settings"] = settings
+		return resolved, nil
+	}
+	if protocol == "l2tp" || protocol == "pptp" || protocol == "ikev2" || protocol == "anyconnect" || protocol == "sstp" || protocol == "gre" {
+		resolved["settings"] = settings
+		return resolved, nil
+	}
+
+	stream := mapValue(inbound["streamSettings"])
+	if finalMask := mapValue(stream["finalmask"]); len(finalMask) > 0 {
+		resolved["finalmask"] = finalMask
+	}
+	if network := normalizeNetwork(stringValue(stream["network"])); network != "" {
+		resolved["network"] = network
+	}
+	security := strings.ToLower(stringValue(stream["security"]))
+	if security == "tls" || security == "reality" {
+		resolved["tls"] = security
+	}
+
+	if security == "tls" {
+		tlsSettings := mapValue(stream["tlsSettings"])
+		tlsMeta := mapValue(tlsSettings["settings"])
+		resolved["sni"] = nonEmptyStrings(firstNonEmptyString(tlsSettings["serverName"], tlsSettings["sni"], tlsMeta["serverName"], tlsMeta["sni"]))
+		if cipherSuites := firstNonEmptyString(tlsSettings["cipherSuites"], tlsMeta["cipherSuites"]); cipherSuites != "" {
+			resolved["cipherSuites"] = cipherSuites
+		}
+		if fp := firstNonEmptyString(tlsMeta["fingerprint"], tlsSettings["fingerprint"]); fp != "" {
+			resolved["fp"] = fp
+		}
+		if alpn := firstNonEmptyString(joinStringList(tlsSettings["alpn"]), joinStringList(tlsMeta["alpn"])); alpn != "" {
+			resolved["alpn"] = alpn
+		}
+		if ech := firstNonEmptyString(tlsMeta["echConfigList"], tlsSettings["echConfigList"]); ech != "" {
+			resolved["ech"] = ech
+			resolved["echConfigList"] = ech
+		}
+		if vcn := firstNonEmptyString(tlsMeta["verifyPeerCertByName"], tlsSettings["verifyPeerCertByName"]); vcn != "" {
+			resolved["vcn"] = vcn
+			resolved["verifyPeerCertByName"] = vcn
+		}
+		if pin := firstNonEmptyString(joinStringList(tlsMeta["pinnedPeerCertSha256"]), joinStringList(tlsSettings["pinnedPeerCertSha256"]), tlsMeta["pinnedPeerCertSha256"], tlsSettings["pinnedPeerCertSha256"]); pin != "" {
+			resolved["pinSHA256"] = pin
+			resolved["pinnedPeerCertSha256"] = pin
+		}
+		if value, ok := firstPresent(tlsMeta, tlsSettings, "allowInsecure"); ok {
+			resolved["ais"] = value
+			resolved["allowinsecure"] = boolValue(value)
+		}
+	}
+	if security == "reality" {
+		realitySettings := mapValue(stream["realitySettings"])
+		realityMeta := mapValue(realitySettings["settings"])
+		resolved["fp"] = firstNonEmptyString(realityMeta["fingerprint"], realitySettings["fingerprint"], "chrome")
+		sni := stringList(realitySettings["serverNames"])
+		if len(sni) == 0 {
+			sni = nonEmptyStrings(firstNonEmptyString(realityMeta["serverName"], realitySettings["serverName"], realityMeta["sni"], realitySettings["sni"]))
+		}
+		resolved["sni"] = sni
+		pbk := firstNonEmptyString(realityMeta["publicKey"], realitySettings["publicKey"], realityMeta["public_key"], realitySettings["public_key"])
+		if pbk == "" {
+			if derived, err := xrayconfig.DeriveRealityPublicKey(firstNonEmptyString(realitySettings["privateKey"], realityMeta["privateKey"])); err == nil {
+				pbk = derived
+			}
+		}
+		resolved["pbk"] = pbk
+		sids := stringList(realitySettings["shortIds"])
+		if len(sids) == 0 {
+			sids = stringList(realitySettings["shortId"])
+		}
+		if len(sids) == 0 {
+			sids = stringList(realityMeta["shortIds"])
+		}
+		if len(sids) == 0 {
+			sids = stringList(realityMeta["shortId"])
+		}
+		resolved["sids"] = sids
+		if len(sids) > 0 {
+			resolved["sid"] = sids[0]
+		}
+		resolved["spx"] = firstNonEmptyString(realityMeta["spiderX"], realitySettings["SpiderX"], realitySettings["spiderX"])
+		resolved["pqv"] = firstNonEmptyString(realityMeta["mldsa65Verify"], realitySettings["mldsa65Verify"])
+	}
+
+	network := stringValue(resolved["network"])
+	networkSettings := mapValue(stream[networkSettingsKey(network)])
+	switch network {
+	case "hysteria":
+		hysteriaSettings := mapValue(stream["hysteriaSettings"])
+		if version := intValue(firstNonEmptyValue(settings["version"], hysteriaSettings["version"])); version > 0 {
+			resolved["hysteria_version"] = version
+		}
+		if auth := stringValue(hysteriaSettings["auth"]); auth != "" {
+			resolved["hysteria_auth"] = auth
+		}
+		if timeout := intValue(hysteriaSettings["udpIdleTimeout"]); timeout > 0 {
+			resolved["hysteria_udp_idle_timeout"] = timeout
+		}
+		applyHysteriaFinalMaskShareFields(resolved)
+	case "tcp", "raw":
+		header := mapValue(networkSettings["header"])
+		resolved["header_type"] = stringValue(header["type"])
+		request := mapValue(header["request"])
+		resolved["path"] = firstStringList(request["path"])
+		headers := mapValue(request["headers"])
+		resolved["host"] = stringList(headers["Host"])
+	case "ws":
+		resolved["path"] = stringValue(networkSettings["path"])
+		host := firstNonEmptyString(networkSettings["host"])
+		headers := mapValue(networkSettings["headers"])
+		if host == "" {
+			host = firstStringList(headers["Host"])
+		}
+		resolved["host"] = nonEmptyStrings(host)
+		copyOptional(resolved, "heartbeatPeriod", networkSettings)
+	case "grpc", "gun":
+		resolved["path"] = stringValue(networkSettings["serviceName"])
+		resolved["host"] = nonEmptyStrings(stringValue(networkSettings["authority"]))
+		copyOptional(resolved, "multiMode", networkSettings)
+	case "quic":
+		header := mapValue(networkSettings["header"])
+		resolved["header_type"] = stringValue(header["type"])
+		resolved["path"] = stringValue(networkSettings["key"])
+		resolved["host"] = nonEmptyStrings(stringValue(networkSettings["security"]))
+	case "httpupgrade":
+		resolved["path"] = stringValue(networkSettings["path"])
+		resolved["host"] = stringList(networkSettings["host"])
+	case "splithttp", "xhttp":
+		resolved["path"] = stringValue(networkSettings["path"])
+		host := firstNonEmptyString(networkSettings["host"])
+		if host == "" {
+			host = xhttpHostHeader(networkSettings["headers"])
+		}
+		resolved["host"] = nonEmptyStrings(host)
+		copyOptional(resolved, "scMaxEachPostBytes", networkSettings)
+		copyOptional(resolved, "scMaxConcurrentPosts", networkSettings)
+		copyOptional(resolved, "scMinPostsIntervalMs", networkSettings)
+		copyOptional(resolved, "xPaddingBytes", networkSettings)
+		copyOptional(resolved, "xPaddingObfsMode", networkSettings)
+		copyOptional(resolved, "xPaddingKey", networkSettings)
+		copyOptional(resolved, "xPaddingHeader", networkSettings)
+		copyOptional(resolved, "xPaddingPlacement", networkSettings)
+		copyOptional(resolved, "xPaddingMethod", networkSettings)
+		copyOptional(resolved, "uplinkHTTPMethod", networkSettings)
+		copyOptionalAlias(resolved, "sessionIDPlacement", networkSettings, "sessionPlacement")
+		copyOptionalAlias(resolved, "sessionIDKey", networkSettings, "sessionKey")
+		copyOptionalAlias(resolved, "sessionIDTable", networkSettings, "sessionTable")
+		copyOptionalAlias(resolved, "sessionIDLength", networkSettings, "sessionLength")
+		copyOptional(resolved, "headers", networkSettings)
+		copyOptional(resolved, "downloadSettings", networkSettings)
+		copyOptional(resolved, "seqPlacement", networkSettings)
+		copyOptional(resolved, "seqKey", networkSettings)
+		copyOptional(resolved, "uplinkDataPlacement", networkSettings)
+		copyOptional(resolved, "uplinkDataKey", networkSettings)
+		copyOptional(resolved, "uplinkChunkSize", networkSettings)
+		copyOptional(resolved, "xmux", networkSettings)
+		copyOptional(resolved, "mode", networkSettings)
+		copyOptional(resolved, "noGRPCHeader", networkSettings)
+		copyOptional(resolved, "keepAlivePeriod", networkSettings)
+	case "kcp":
+		header := mapValue(networkSettings["header"])
+		resolved["header_type"] = stringValue(header["type"])
+		resolved["path"] = stringValue(networkSettings["seed"])
+		resolved["host"] = nonEmptyStrings(stringValue(header["domain"]))
+		copyOptional(resolved, "mtu", networkSettings)
+		copyOptional(resolved, "tti", networkSettings)
+	case "http", "h2", "h3":
+		resolved["path"] = stringValue(networkSettings["path"])
+		resolved["host"] = stringList(networkSettings["host"])
+	}
+	return resolved, nil
+}
+
+func applyHysteriaFinalMaskShareFields(resolved ResolvedInbound) {
+	for _, key := range []string{"obfs", "obfs-password", "hysteria_gecko_packet_size", "mport"} {
+		delete(resolved, key)
+	}
+	finalMask := mapValue(resolved["finalmask"])
+	for _, item := range listAny(finalMask["udp"]) {
+		mask := mapValue(item)
+		if !strings.EqualFold(stringValue(mask["type"]), "salamander") {
+			continue
+		}
+		settings := mapValue(mask["settings"])
+		if password := stringValue(settings["password"]); password != "" {
+			resolved["obfs"] = "salamander"
+			resolved["obfs-password"] = password
+			if packetSize := stringValue(settings["packetSize"]); packetSize != "" {
+				resolved["obfs"] = "gecko"
+				resolved["hysteria_gecko_packet_size"] = packetSize
+			}
+		}
+		break
+	}
+	if ports := stringValue(mapValue(mapValue(finalMask["quicParams"])["udpHop"])["ports"]); ports != "" {
+		resolved["mport"] = ports
+	}
+}
+
+func normalizeProxyProtocol(value string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(value))
+	switch cleaned {
+	case "shadowsocks", "ss":
+		return "shadowsocks"
+	case "vmess", "vless", "trojan":
+		return cleaned
+	case "l2tp", "l2tp-ipsec", "l2tp/ipsec":
+		return "l2tp"
+	case "openvpn", "ov":
+		return "openvpn"
+	case "wireguard", "wg":
+		return "wireguard"
+	case "ikev2", "ike-v2":
+		return "ikev2"
+	case "anyconnect", "cisco", "ocserv", "openconnect":
+		return "anyconnect"
+	default:
+		return cleaned
+	}
+}
+
+func normalizeNetwork(value string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(value))
+	if cleaned == "" {
+		return "tcp"
+	}
+	return cleaned
+}
+
+func networkSettingsKey(network string) string {
+	switch network {
+	case "raw":
+		return "rawSettings"
+	case "gun":
+		return "grpcSettings"
+	case "h2":
+		return "h2Settings"
+	case "h3":
+		return "h3Settings"
+	default:
+		return network + "Settings"
+	}
+}
+
+func grpcGunPath(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		return path
+	}
+	serviceName, streamName := splitGRPCPath(path)
+	streamName = strings.Split(streamName, "|")[0]
+	if streamName == "Tun" {
+		return strings.TrimPrefix(serviceName, "/")
+	}
+	return serviceName + "/" + streamName
+}
+
+func grpcMultiPath(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		return path
+	}
+	serviceName, streamName := splitGRPCPath(path)
+	parts := strings.Split(streamName, "|")
+	if len(parts) > 1 {
+		streamName = parts[1]
+	}
+	return serviceName + "/" + streamName
+}
+
+func splitGRPCPath(path string) (string, string) {
+	index := strings.LastIndex(path, "/")
+	if index < 0 {
+		return "", path
+	}
+	return path[:index], path[index+1:]
+}
+
+func listOfMaps(value any) []map[string]any {
+	items, ok := value.([]any)
+	if !ok {
+		if typed, ok := value.([]map[string]any); ok {
+			return typed
+		}
+		return nil
+	}
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if mapped := mapValue(item); len(mapped) > 0 {
+			result = append(result, mapped)
+		}
+	}
+	return result
+}
+
+func mapValue(value any) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed
+	case map[string]string:
+		result := make(map[string]any, len(typed))
+		for key, value := range typed {
+			result[key] = value
+		}
+		return result
+	case json.RawMessage:
+		return jsonMap(string(typed))
+	case []byte:
+		return jsonMap(typed)
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return map[string]any{}
+		}
+		return jsonMap(typed)
+	default:
+		return map[string]any{}
+	}
+}
+
+func stringList(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := stringValue(item); text != "" {
+				result = append(result, text)
+			}
+		}
+		return result
+	case string:
+		if typed == "" {
+			return nil
+		}
+		parts := strings.Split(typed, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if text := strings.TrimSpace(part); text != "" {
+				result = append(result, text)
+			}
+		}
+		return result
+	default:
+		text := stringValue(value)
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func nonEmptyStrings(values ...string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func firstStringList(value any) string {
+	values := stringList(value)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func splitCommaLines(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r'
+	})
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if cleaned := strings.TrimSpace(part); cleaned != "" {
+			result = append(result, cleaned)
+		}
+	}
+	return result
+}
+
+func joinStringList(value any) string {
+	values := stringList(value)
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.Join(values, ",")
+}
+
+func firstNonEmptyValue(values ...any) any {
+	for _, value := range values {
+		if !inboundValueEmpty(value) {
+			return value
+		}
+	}
+	return nil
+}
+
+func hysteriaPinHex(pin string) string {
+	stripped := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(pin), ":", ""))
+	if len(stripped) == 64 {
+		if _, err := hex.DecodeString(stripped); err == nil {
+			return stripped
+		}
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(pin))
+	if err != nil {
+		decoded, err = base64.StdEncoding.DecodeString(strings.TrimSpace(pin))
+	}
+	if err != nil || len(decoded) != 32 {
+		return pin
+	}
+	return hex.EncodeToString(decoded)
+}
+
+func firstCSV(value string) string {
+	parts := strings.Split(value, ",")
+	for _, part := range parts {
+		if text := strings.TrimSpace(part); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func normalizeHostSelectionMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "ttl":
+		return "ttl"
+	default:
+		return "random"
+	}
+}
+
+func normalizeHostOptionList(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		for _, part := range splitHostOptionValue(value) {
+			cleaned := strings.TrimSpace(part)
+			if cleaned == "" {
+				continue
+			}
+			key := strings.ToLower(cleaned)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, cleaned)
+		}
+	}
+	return result
+}
+
+func splitHostOptionValue(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == '\n' || r == '\r' || r == ','
+	})
+}
+
+func selectHostRotationValue(hostID int64, field string, value string, options []string, mode string, ttl *int64) string {
+	choices := normalizeHostOptionList(append([]string{value}, options...))
+	if len(choices) == 0 {
+		return ""
+	}
+	if len(choices) == 1 {
+		return choices[0]
+	}
+	if normalizeHostSelectionMode(mode) == "ttl" {
+		ttlSeconds := int64(60)
+		if ttl != nil && *ttl > 0 {
+			ttlSeconds = *ttl
+		}
+		bucket := time.Now().UTC().Unix() / ttlSeconds
+		hash := fnv.New64a()
+		_, _ = fmt.Fprintf(hash, "%d:%s", hostID, field)
+		offset := int64(hash.Sum64() % uint64(len(choices)))
+		return choices[int((bucket+offset)%int64(len(choices)))]
+	}
+	return choices[randomHostOptionIndex(len(choices))]
+}
+
+func randomHostOptionIndex(length int) int {
+	if length <= 1 {
+		return 0
+	}
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err == nil {
+		return int(binary.BigEndian.Uint64(buf[:]) % uint64(length))
+	}
+	return int(time.Now().UnixNano() % int64(length))
+}
+
+func firstNonEmptyString(values ...any) string {
+	for _, value := range values {
+		if text := stringValue(value); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func firstPresent(primary map[string]any, secondary map[string]any, key string) (any, bool) {
+	if primary != nil {
+		if value, ok := primary[key]; ok {
+			return value, true
+		}
+	}
+	if secondary != nil {
+		if value, ok := secondary[key]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func stringValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(typed)
+	case []byte:
+		return strings.TrimSpace(string(typed))
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	case int:
+		return strconv.Itoa(typed)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case int32:
+		return strconv.FormatInt(int64(typed), 10)
+	case float64:
+		if float64(int64(typed)) == typed {
+			return strconv.FormatInt(int64(typed), 10)
+		}
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(typed), 'f', -1, 32)
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
+func boolValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		cleaned := strings.ToLower(strings.TrimSpace(typed))
+		return cleaned == "true" || cleaned == "1" || cleaned == "yes"
+	case int:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case float64:
+		return typed != 0
+	default:
+		return false
+	}
+}
+
+func intValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		parsed, _ := strconv.Atoi(strings.TrimSpace(typed))
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func truthy(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case bool:
+		return typed
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case int:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case float64:
+		return typed != 0
+	default:
+		return true
+	}
+}
+
+func portString(value any) string {
+	return stringValue(value)
+}
+
+func copyOptional(target map[string]any, key string, source map[string]any) {
+	if value, ok := source[key]; ok {
+		target[key] = value
+	}
+}
+
+func copyOptionalAlias(target map[string]any, key string, source map[string]any, aliases ...string) {
+	if value, ok := source[key]; ok {
+		target[key] = value
+		return
+	}
+	for _, alias := range aliases {
+		if value, ok := source[alias]; ok {
+			target[key] = value
+			return
+		}
+	}
+}
+
+func appendOptionalParam(params []queryParam, key string, source map[string]any) []queryParam {
+	if value, ok := source[key]; ok {
+		return append(params, queryParam{key, value})
+	}
+	return params
+}
+
+func xhttpShareExtraParams(inbound map[string]any) []queryParam {
+	params := make([]queryParam, 0, 24)
+	for _, key := range []string{
+		"scMaxEachPostBytes", "scMinPostsIntervalMs", "xPaddingBytes", "noGRPCHeader", "keepAlivePeriod",
+		"xPaddingObfsMode", "xPaddingKey", "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod",
+		"uplinkHTTPMethod", "sessionIDPlacement", "sessionIDKey", "sessionIDTable", "sessionIDLength",
+		"seqPlacement", "seqKey", "uplinkDataPlacement", "uplinkDataKey", "uplinkChunkSize", "xmux",
+	} {
+		params = appendOptionalParam(params, key, inbound)
+	}
+	if headers := xhttpShareHeaders(inbound["headers"]); len(headers) > 0 {
+		params = append(params, queryParam{"headers", headers})
+	}
+	if download := xhttpShareDownloadSettings(inbound["downloadSettings"]); len(download) > 0 {
+		params = append(params, queryParam{"downloadSettings", download})
+	}
+	return params
+}
+
+func xhttpShareExtraMap(inbound map[string]any) map[string]any {
+	result := map[string]any{}
+	for _, item := range xhttpShareExtraParams(inbound) {
+		result[item.key] = item.value
+	}
+	return result
+}
+
+func xhttpShareHeaders(value any) map[string]any {
+	result := map[string]any{}
+	switch headers := value.(type) {
+	case map[string]any:
+		for name, headerValue := range headers {
+			if !strings.EqualFold(strings.TrimSpace(name), "Host") {
+				result[name] = headerValue
+			}
+		}
+	case map[string]string:
+		for name, headerValue := range headers {
+			if !strings.EqualFold(strings.TrimSpace(name), "Host") {
+				result[name] = headerValue
+			}
+		}
+	}
+	return result
+}
+
+func xhttpShareDownloadSettings(value any) map[string]any {
+	download := mapValue(value)
+	if len(download) == 0 {
+		return nil
+	}
+	result := make(map[string]any, len(download))
+	for key, setting := range download {
+		result[key] = setting
+	}
+	for _, key := range []string{"xhttpSettings", "splithttpSettings"} {
+		nested := mapValue(download[key])
+		if len(nested) == 0 {
+			continue
+		}
+		filtered := make(map[string]any, len(nested))
+		for nestedKey, setting := range nested {
+			filtered[nestedKey] = setting
+		}
+		if headers := xhttpShareHeaders(nested["headers"]); len(headers) > 0 {
+			filtered["headers"] = headers
+		} else {
+			delete(filtered, "headers")
+		}
+		result[key] = filtered
+	}
+	return result
+}
+
+func xhttpHostHeader(value any) string {
+	switch headers := value.(type) {
+	case map[string]any:
+		for name, headerValue := range headers {
+			if strings.EqualFold(strings.TrimSpace(name), "Host") {
+				return firstStringList(headerValue)
+			}
+		}
+	case map[string]string:
+		for name, headerValue := range headers {
+			if strings.EqualFold(strings.TrimSpace(name), "Host") {
+				return headerValue
+			}
+		}
+	}
+	return ""
+}
+
+func formatIPForURL(value string) string {
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return value
+	}
+	if ip.To4() == nil && strings.Contains(value, ":") && !strings.HasPrefix(value, "[") {
+		return "[" + value + "]"
+	}
+	return value
+}
+
+func urlencodeOrdered(params []queryParam) string {
+	parts := make([]string, 0, len(params))
+	for _, param := range params {
+		parts = append(parts, queryEscape(param.key)+"="+queryEscape(pythonStringValue(param.value)))
+	}
+	return strings.Join(parts, "&")
+}
+
+func queryEscape(value string) string {
+	return percentEncode(value, "", true)
+}
+
+func percentEncode(value string, safe string, spaceAsPlus bool) string {
+	safeSet := map[byte]struct{}{}
+	for i := 0; i < len(safe); i++ {
+		safeSet[safe[i]] = struct{}{}
+	}
+	var builder strings.Builder
+	for _, b := range []byte(value) {
+		if isUnreserved(b) {
+			builder.WriteByte(b)
+			continue
+		}
+		if _, ok := safeSet[b]; ok {
+			builder.WriteByte(b)
+			continue
+		}
+		if b == ' ' && spaceAsPlus {
+			builder.WriteByte('+')
+			continue
+		}
+		builder.WriteString(fmt.Sprintf("%%%02X", b))
+	}
+	return builder.String()
+}
+
+func isUnreserved(value byte) bool {
+	return (value >= 'A' && value <= 'Z') ||
+		(value >= 'a' && value <= 'z') ||
+		(value >= '0' && value <= '9') ||
+		value == '_' || value == '.' || value == '-' || value == '~'
+}
+
+func pythonStringValue(value any) string {
+	switch typed := value.(type) {
+	case bool:
+		if typed {
+			return "True"
+		}
+		return "False"
+	case map[string]any:
+		return pythonJSONDumpsSorted(typed)
+	default:
+		return stringValue(value)
+	}
+}
+
+func pythonJSONDumpsOrdered(params []queryParam) string {
+	parts := make([]string, 0, len(params))
+	for _, param := range params {
+		parts = append(parts, strconv.QuoteToASCII(param.key)+":"+pythonJSONDumpsValue(param.value, false))
+	}
+	return "{" + strings.Join(parts, ",") + "}"
+}
+
+func pythonJSONDumpsSorted(value map[string]any) string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, strconv.QuoteToASCII(key)+": "+pythonJSONDumpsValue(value[key], true))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+func pythonJSONDumpsValue(value any, sortKeys bool) string {
+	switch typed := value.(type) {
+	case nil:
+		return "null"
+	case string:
+		return strconv.QuoteToASCII(typed)
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case int:
+		return strconv.Itoa(typed)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case float64:
+		if float64(int64(typed)) == typed {
+			return strconv.FormatInt(int64(typed), 10)
+		}
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case []string:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			parts = append(parts, pythonJSONDumpsValue(item, sortKeys))
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			parts = append(parts, pythonJSONDumpsValue(item, sortKeys))
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case map[string]any:
+		if sortKeys {
+			return pythonJSONDumpsSorted(typed)
+		}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			parts = append(parts, strconv.QuoteToASCII(key)+": "+pythonJSONDumpsValue(typed[key], sortKeys))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	default:
+		return strconv.QuoteToASCII(stringValue(typed))
+	}
+}
+
+func hexToBytes(value string) ([]byte, error) {
+	cleaned := strings.TrimSpace(strings.ReplaceAll(value, "-", ""))
+	return hex.DecodeString(cleaned)
+}

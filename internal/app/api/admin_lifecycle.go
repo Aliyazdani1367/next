@@ -1,0 +1,304 @@
+package api
+
+import (
+	"context"
+	"database/sql"
+	"time"
+
+	adminapp "github.com/nextpanel/next/internal/app/admin"
+	"github.com/nextpanel/next/internal/app/logging"
+	userapp "github.com/nextpanel/next/internal/app/user"
+)
+
+const defaultAdminLifecycleInterval = 30 * time.Second
+
+type adminLifecycleResult struct {
+	Checked   int
+	Disabled  int
+	Reenabled int
+}
+
+func (s *Server) runAdminLifecycleWorker(ctx context.Context) {
+	interval := parseWorkerInterval(s.cfg.AdminLifecycleInterval, defaultAdminLifecycleInterval)
+	if interval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	s.reviewAdminLifecycle(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.reviewAdminLifecycle(ctx)
+		}
+	}
+}
+
+func (s *Server) reviewAdminLifecycle(ctx context.Context) {
+	workerCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	result, err := s.reconcileAdminLifecycle(workerCtx)
+	if err != nil {
+		logging.Warnf(logging.ComponentAdmin, "lifecycle review failed: %v", err)
+		return
+	}
+	if result.Disabled > 0 || result.Reenabled > 0 {
+		logging.Infof(
+			logging.ComponentAdmin,
+			"lifecycle checked=%d disabled=%d reenabled=%d",
+			result.Checked,
+			result.Disabled,
+			result.Reenabled,
+		)
+	}
+}
+
+func (s *Server) reconcileAdminLifecycle(ctx context.Context) (adminLifecycleResult, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT username FROM admins WHERE role != ? AND status IN (?, ?)`, string(adminapp.RoleFullAccess), string(adminapp.StatusActive), string(adminapp.StatusDisabled))
+	if err != nil {
+		return adminLifecycleResult{}, err
+	}
+	usernames := []string{}
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			rows.Close()
+			return adminLifecycleResult{}, err
+		}
+		usernames = append(usernames, username)
+	}
+	if err := rows.Close(); err != nil {
+		return adminLifecycleResult{}, err
+	}
+
+	result := adminLifecycleResult{Checked: len(usernames)}
+	for _, username := range usernames {
+		var changed adminLimitTransition
+		if err := s.withTx(ctx, func(tx *sql.Tx) error {
+			target, err := adminByUsernameTx(ctx, tx, username)
+			if err != nil {
+				return err
+			}
+			changed, err = reconcileAdminTrafficLimitStateTx(ctx, tx, target, time.Now().UTC())
+			return err
+		}); err != nil {
+			return result, err
+		}
+		if changed.Disabled {
+			result.Disabled++
+			s.telegramReports.AdminLimitReached(ctx, telegramAdminLimitReport(username, changed.Reason, "system"))
+		}
+		if changed.Reenabled {
+			result.Reenabled++
+		}
+	}
+	return result, nil
+}
+
+type adminLimitTransition struct {
+	Disabled  bool
+	Reenabled bool
+	Reason    string
+}
+
+func reconcileAdminTrafficLimitStateTx(ctx context.Context, tx *sql.Tx, target adminapp.Admin, nowTime time.Time) (adminLimitTransition, error) {
+	transition, err := reconcileAdminLimitStateTx(ctx, tx, target, nowTime)
+	if err != nil {
+		return adminLimitTransition{}, err
+	}
+	target, err = adminByUsernameTx(ctx, tx, target.Username)
+	if err != nil {
+		return adminLimitTransition{}, err
+	}
+	if err := reconcileAdminServiceLimitStateTx(ctx, tx, target, nowTime); err != nil {
+		return adminLimitTransition{}, err
+	}
+	return transition, nil
+}
+
+func reconcileAdminTrafficLimitByIDTx(ctx context.Context, tx *sql.Tx, adminID int64, nowTime time.Time) error {
+	var username string
+	if err := tx.QueryRowContext(ctx, `SELECT username FROM admins WHERE id = ?`, adminID).Scan(&username); err != nil {
+		return err
+	}
+	target, err := adminByUsernameTx(ctx, tx, username)
+	if err != nil {
+		return err
+	}
+	_, err = reconcileAdminTrafficLimitStateTx(ctx, tx, target, nowTime)
+	return err
+}
+
+func reconcileAdminServiceLimitStateTx(ctx context.Context, tx *sql.Tx, target adminapp.Admin, nowTime time.Time) error {
+	exhausted := map[int64]struct{}{}
+	if target.Role != adminapp.RoleFullAccess && target.UseServiceTrafficLimits {
+		for _, limit := range target.ServiceLimits {
+			if userapp.TrafficScopeUsedLimitReached(limit) {
+				exhausted[limit.ServiceID] = struct{}{}
+			}
+		}
+	}
+
+	if target.Status == adminapp.StatusActive {
+		rows, err := tx.QueryContext(ctx, `SELECT id, service_id FROM users WHERE admin_id = ? AND status = ? AND service_limit_disabled_at IS NOT NULL`, target.ID, "disabled")
+		if err != nil {
+			return err
+		}
+		restoreIDs := []int64{}
+		for rows.Next() {
+			var userID int64
+			var serviceID sql.NullInt64
+			if err := rows.Scan(&userID, &serviceID); err != nil {
+				rows.Close()
+				return err
+			}
+			if _, stillExhausted := exhausted[serviceID.Int64]; !serviceID.Valid || !stillExhausted {
+				restoreIDs = append(restoreIDs, userID)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for start := 0; start < len(restoreIDs); start += 400 {
+			end := start + 400
+			if end > len(restoreIDs) {
+				end = len(restoreIDs)
+			}
+			chunk := restoreIDs[start:end]
+			inSQL, idArgs := sqlInClauseInt64(chunk)
+			now := dbTimestamp(nowTime)
+			args := []any{now, "on_hold", "active", now}
+			args = append(args, idArgs...)
+			if _, err := tx.ExecContext(ctx, `UPDATE users SET status = CASE WHEN (on_hold_timeout IS NOT NULL AND on_hold_timeout > ?) OR COALESCE(on_hold_expire_duration, 0) > 0 THEN ? ELSE ? END, last_status_change = ?, service_limit_disabled_at = NULL WHERE id IN (`+inSQL+`) AND status = ? AND service_limit_disabled_at IS NOT NULL`, append(args, "disabled")...); err != nil {
+				return err
+			}
+			rows, err := tx.QueryContext(ctx, `SELECT id FROM users WHERE id IN (`+inSQL+`) AND status IN (?, ?)`, append(idArgs, "active", "on_hold")...)
+			if err != nil {
+				return err
+			}
+			enabledIDs, err := scanInt64Rows(rows)
+			if err != nil {
+				return err
+			}
+			for _, userID := range enabledIDs {
+				if err := enqueueNodeOperationTx(ctx, tx, "enable_user", nil, &userID, map[string]any{}); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	now := dbTimestamp(nowTime)
+	for serviceID := range exhausted {
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM users WHERE admin_id = ? AND service_id = ? AND status IN (?, ?)`, target.ID, serviceID, "active", "on_hold")
+		if err != nil {
+			return err
+		}
+		userIDs, err := scanInt64Rows(rows)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET status = ?, last_status_change = ?, service_limit_disabled_at = ? WHERE admin_id = ? AND service_id = ? AND status IN (?, ?)`, "disabled", now, now, target.ID, serviceID, "active", "on_hold"); err != nil {
+			return err
+		}
+		for _, userID := range userIDs {
+			if err := enqueueNodeOperationTx(ctx, tx, "disable_user", nil, &userID, map[string]any{}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func reconcileAdminLimitStateTx(ctx context.Context, tx *sql.Tx, target adminapp.Admin, nowTime time.Time) (adminLimitTransition, error) {
+	reason := adminLimitReason(target, nowTime)
+	if reason != "" {
+		if target.Status != adminapp.StatusActive {
+			return adminLimitTransition{}, nil
+		}
+		now := dbTimestamp(nowTime)
+		if _, err := tx.ExecContext(ctx, `UPDATE admins SET status = ?, disabled_reason = ? WHERE id = ?`, string(adminapp.StatusDisabled), reason, target.ID); err != nil {
+			return adminLimitTransition{}, err
+		}
+		userIDs, err := userIDsByAdminStatusInTx(ctx, tx, target.ID, []string{"active", "on_hold"})
+		if err != nil {
+			return adminLimitTransition{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET status = ?, last_status_change = ?, admin_disabled_at = ? WHERE admin_id = ? AND status IN (?, ?)`, "disabled", now, now, target.ID, "active", "on_hold"); err != nil {
+			return adminLimitTransition{}, err
+		}
+		for _, userID := range userIDs {
+			if err := enqueueNodeOperationTx(ctx, tx, "disable_user", nil, &userID, map[string]any{}); err != nil {
+				return adminLimitTransition{}, err
+			}
+		}
+		return adminLimitTransition{Disabled: true, Reason: reason}, nil
+	}
+
+	if target.Status == adminapp.StatusDisabled && target.DisabledReason != nil && isAdminLimitReason(*target.DisabledReason) {
+		userIDs, err := disabledByAdminUserIDsTx(ctx, tx, target.ID)
+		if err != nil {
+			return adminLimitTransition{}, err
+		}
+		if err := ensureAdminUserLimitForActivation(ctx, tx, target, len(userIDs)); err != nil {
+			return adminLimitTransition{}, err
+		}
+		now := dbTimestamp(nowTime)
+		if _, err := tx.ExecContext(ctx, `UPDATE admins SET status = ?, disabled_reason = NULL WHERE id = ?`, string(adminapp.StatusActive), target.ID); err != nil {
+			return adminLimitTransition{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE admin_sessions SET revoked_at = ? WHERE admin_id = ? AND state = ? AND revoked_at IS NULL`, now, target.ID, string(adminapp.SessionDisabled)); err != nil {
+			return adminLimitTransition{}, err
+		}
+		if _, err := tx.ExecContext(
+			ctx,
+			`UPDATE users SET status = CASE WHEN (on_hold_timeout IS NOT NULL AND on_hold_timeout > ?) OR COALESCE(on_hold_expire_duration, 0) > 0 THEN ? ELSE ? END, last_status_change = ?, admin_disabled_at = NULL WHERE admin_id = ? AND status = ? AND admin_disabled_at IS NOT NULL`,
+			now,
+			"on_hold",
+			"active",
+			now,
+			target.ID,
+			"disabled",
+		); err != nil {
+			return adminLimitTransition{}, err
+		}
+		for _, userID := range userIDs {
+			if err := enqueueNodeOperationTx(ctx, tx, "enable_user", nil, &userID, map[string]any{}); err != nil {
+				return adminLimitTransition{}, err
+			}
+		}
+		return adminLimitTransition{Reenabled: true}, nil
+	}
+
+	return adminLimitTransition{}, nil
+}
+
+func adminLimitReason(target adminapp.Admin, now time.Time) string {
+	if target.Role == adminapp.RoleFullAccess {
+		return ""
+	}
+	if target.Expire != nil && *target.Expire > 0 && *target.Expire <= now.UTC().Unix() {
+		return adminTimeLimitExhaustedReason
+	}
+	if !target.UseServiceTrafficLimits &&
+		target.TrafficLimitMode == adminapp.TrafficLimitUsedTraffic &&
+		target.DataLimit != nil &&
+		*target.DataLimit > 0 &&
+		target.UsersUsage >= *target.DataLimit {
+		return adminDataLimitExhaustedReason
+	}
+	return ""
+}
+
+func isAdminLimitReason(reason string) bool {
+	return reason == adminDataLimitExhaustedReason || reason == adminTimeLimitExhaustedReason
+}
