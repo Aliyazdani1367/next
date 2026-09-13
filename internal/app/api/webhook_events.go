@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	telegramapp "github.com/nextpanel/next/internal/app/telegram"
-	webhookapp "github.com/nextpanel/next/internal/app/webhook"
+	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
+	webhookapp "github.com/aliyazdani1367/next/internal/app/webhook"
 )
 
 // webhookUserEvent maps an already-assembled Telegram user report into a webhook

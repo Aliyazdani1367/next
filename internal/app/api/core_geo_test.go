@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nextpanel/next/internal/app/nodecontroller"
+	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
 )
 
 func TestHandleCoreXrayReleasesUsesGitHubShape(t *testing.T) {

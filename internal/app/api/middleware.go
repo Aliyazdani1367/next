@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
 )
 
 type contextKey string

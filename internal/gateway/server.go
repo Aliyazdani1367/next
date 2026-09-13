@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	certificateapp "github.com/nextpanel/next/internal/app/certificates"
+	certificateapp "github.com/aliyazdani1367/next/internal/app/certificates"
 )
 
 type Server struct {

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	nodev1 "github.com/nextpanel/next/internal/proto/node/v1"
+	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
 )
 
 func TestNodeGRPCPortCandidatesPreferControlPortWithLegacyFallback(t *testing.T) {

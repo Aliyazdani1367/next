@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 type outboundTrafficTarget struct {

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	warpapp "github.com/nextpanel/next/internal/app/warp"
+	warpapp "github.com/aliyazdani1367/next/internal/app/warp"
 )
 
 func (s *Server) handleWarpAccount(w http.ResponseWriter, r *http.Request) {

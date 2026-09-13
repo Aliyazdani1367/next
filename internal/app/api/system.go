@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	dashboardapp "github.com/nextpanel/next/internal/app/dashboard"
-	systemapp "github.com/nextpanel/next/internal/app/system"
+	dashboardapp "github.com/aliyazdani1367/next/internal/app/dashboard"
+	systemapp "github.com/aliyazdani1367/next/internal/app/system"
 )
 
 func (s *Server) handleSystemStats(w http.ResponseWriter, r *http.Request) {

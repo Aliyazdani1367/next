@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/nextpanel/next/internal/app/nodecontroller"
+	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
 )
 
 func TestFlattenNodeStaticItemOmitsRuntimeFields(t *testing.T) {

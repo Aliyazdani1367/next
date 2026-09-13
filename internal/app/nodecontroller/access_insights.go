@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/online"
-	"github.com/nextpanel/next/internal/app/searchmatch"
+	"github.com/aliyazdani1367/next/internal/app/online"
+	"github.com/aliyazdani1367/next/internal/app/searchmatch"
 )
 
 const maxAccessInsightRecords = 5000

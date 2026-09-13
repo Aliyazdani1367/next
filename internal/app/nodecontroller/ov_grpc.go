@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nextpanel/next/internal/app/xrayconfig"
-	nodev1 "github.com/nextpanel/next/internal/proto/node/v1"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
 )
 
 func (c Controller) runtimeConfigRequest(ctx context.Context, node NodeRow, operationID string, configJSON string) (*nodev1.RuntimeConfigRequest, error) {

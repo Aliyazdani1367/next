@@ -14,10 +14,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/logging"
-	"github.com/nextpanel/next/internal/app/nodeclient"
-	outboundsubapp "github.com/nextpanel/next/internal/app/outboundsub"
-	nodev1 "github.com/nextpanel/next/internal/proto/node/v1"
+	"github.com/aliyazdani1367/next/internal/app/logging"
+	"github.com/aliyazdani1367/next/internal/app/nodeclient"
+	outboundsubapp "github.com/aliyazdani1367/next/internal/app/outboundsub"
+	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )

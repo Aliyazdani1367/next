@@ -1,6 +1,6 @@
 package api
 
-import "github.com/nextpanel/next/internal/app/nodecontroller"
+import "github.com/aliyazdani1367/next/internal/app/nodecontroller"
 
 func flattenNodeItem(node nodecontroller.NodeListItem) map[string]any {
 	return map[string]any{

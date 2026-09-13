@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 func (s *Server) handleInboundsRootEntry(w http.ResponseWriter, r *http.Request) {

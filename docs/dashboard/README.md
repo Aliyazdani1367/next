@@ -11,7 +11,7 @@ Use Node.js 20 LTS, which is also used in CI.
 
 ## Install
 
-    git clone https://github.com/nextpanel/Next.git
+    git clone https://github.com/aliyazdani1367/next.git
     cd Next/dashboard
     npm ci
 
@@ -25,7 +25,7 @@ Copy `example.env` to `.env` then set the backend api address:
 
 | Name          | Description                                                                          |
 | ------------- | ------------------------------------------------------------------------------------ |
-| VITE_BASE_API | The api url of the deployed backend ([Next](https://github.com/nextpanel/Next)) |
+| VITE_BASE_API | The api url of the deployed backend ([Next](https://github.com/aliyazdani1367/next)) |
 
 ## Start development server
 

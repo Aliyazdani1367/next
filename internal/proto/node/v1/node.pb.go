@@ -3923,7 +3923,7 @@ const file_next_node_v1_node_proto_rawDesc = "" +
 	"\x10AckOutboundUsage\x12\x1d.next.node.v1.AckUsageRequest\x1a\x1e.next.node.v1.AckUsageResponse2Y\n" +
 	"\x0fNodeLogsService\x12F\n" +
 	"\n" +
-	"StreamLogs\x12\x1f.next.node.v1.StreamLogsRequest\x1a\x15.next.node.v1.LogLine0\x01B9Z7github.com/nextpanel/next/internal/proto/node/v1;nodev1b\x06proto3"
+	"StreamLogs\x12\x1f.next.node.v1.StreamLogsRequest\x1a\x15.next.node.v1.LogLine0\x01B>Z<github.com/aliyazdani1367/next/internal/proto/node/v1;nodev1b\x06proto3"
 
 var (
 	file_next_node_v1_node_proto_rawDescOnce sync.Once

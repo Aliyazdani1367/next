@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/online"
+	"github.com/aliyazdani1367/next/internal/app/online"
 )
 
 type Repository struct {

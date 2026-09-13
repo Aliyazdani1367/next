@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/searchmatch"
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	"github.com/aliyazdani1367/next/internal/app/searchmatch"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 const (

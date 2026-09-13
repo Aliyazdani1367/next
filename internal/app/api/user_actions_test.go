@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	userapp "github.com/nextpanel/next/internal/app/user"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
 )
 
 func testUserMutationServer(t *testing.T) (*Server, *sql.DB, string) {

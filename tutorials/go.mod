@@ -1,4 +1,4 @@
-module github.com/nextpanel/next/tutorials
+module github.com/aliyazdani1367/next/tutorials
 
 go 1.21
 

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/logging"
-	userapp "github.com/nextpanel/next/internal/app/user"
+	"github.com/aliyazdani1367/next/internal/app/logging"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	systemapp "github.com/nextpanel/next/internal/app/system"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	systemapp "github.com/aliyazdani1367/next/internal/app/system"
 )
 
 type fakeRuntimeDetector struct {
@@ -127,7 +127,7 @@ func TestMaintenanceInfoBinaryAndDockerMock(t *testing.T) {
 		info.Panel.Update.Target == nil ||
 		*info.Panel.Update.Target != "dev-abcdef0" ||
 		info.Node != nil ||
-		info.NodeUpdate.Repo != "nextpanel/Next-node" {
+		info.NodeUpdate.Repo != "aliyazdani1367/next-node" {
 		t.Fatalf("unexpected maintenance info: %#v", info)
 	}
 
@@ -136,7 +136,7 @@ func TestMaintenanceInfoBinaryAndDockerMock(t *testing.T) {
 			Mode:        "docker",
 			InstallMode: "docker",
 			Service:     "next",
-			Image:       "nextpanel/next",
+			Image:       "aliyazdani1367/next",
 			Channel:     "unknown",
 			Binary:      map[string]any{},
 		}},

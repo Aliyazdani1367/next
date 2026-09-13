@@ -2,9 +2,9 @@
 set -euo pipefail
 
 NODE_SEARCH_BASE="/opt"
-NODE_IMAGE_REPO="nextpanel/next-node"
+NODE_IMAGE_REPO="aliyazdani1367/next-node"
 DEFAULT_IMAGE_TAG="latest"
-NODE_SCRIPT_URL="https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-node.sh"
+NODE_SCRIPT_URL="https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node.sh"
 
 declare -a NODE_PATHS=()
 declare -a NODE_NAMES=()
@@ -178,13 +178,13 @@ select_node() {
 
 choose_image_tag() {
     log "Default image tag is 'latest' for $NODE_IMAGE_REPO."
-    read -rp "Do you want to use the 'dev' tag instead (nextpanel/next-node:dev)? [y/N]: " answer || answer=""
+    read -rp "Do you want to use the 'dev' tag instead (aliyazdani1367/next-node:dev)? [y/N]: " answer || answer=""
     if [[ "$answer" =~ ^[Yy]$ ]]; then
         DEFAULT_IMAGE_TAG="dev"
-        log "Using image tag 'dev' (nextpanel/next-node:dev)."
+        log "Using image tag 'dev' (aliyazdani1367/next-node:dev)."
     else
         DEFAULT_IMAGE_TAG="latest"
-        log "Using image tag 'latest' (nextpanel/next-node:latest)."
+        log "Using image tag 'latest' (aliyazdani1367/next-node:latest)."
     fi
 }
 

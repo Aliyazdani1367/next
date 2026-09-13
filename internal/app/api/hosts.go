@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 var (

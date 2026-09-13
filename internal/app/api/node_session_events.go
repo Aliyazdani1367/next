@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/nodecontroller"
+	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
 )
 
 const wireGuardSessionStaleAfter = 4 * time.Minute
