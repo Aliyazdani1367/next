@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	nodev1 "github.com/nextpanel/next/internal/proto/node/v1"
+	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
 )
 
 type Repository struct {

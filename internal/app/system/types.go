@@ -1,6 +1,6 @@
 package system
 
-import dashboardapp "github.com/nextpanel/next/internal/app/dashboard"
+import dashboardapp "github.com/aliyazdani1367/next/internal/app/dashboard"
 
 const DefaultVersion = "1.3.0"
 

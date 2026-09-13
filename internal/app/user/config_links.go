@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	outboundsubapp "github.com/nextpanel/next/internal/app/outboundsub"
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	outboundsubapp "github.com/aliyazdani1367/next/internal/app/outboundsub"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 const defaultShadowsocksMethod = "chacha20-ietf-poly1305"

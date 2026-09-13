@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	backupapp "github.com/nextpanel/next/internal/app/backup"
-	telegramapp "github.com/nextpanel/next/internal/app/telegram"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
+	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
 )
 
 func TestBackupExportRequiresBinaryRuntime(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	"github.com/nextpanel/next/internal/app/online"
-	"github.com/nextpanel/next/internal/app/searchmatch"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	"github.com/aliyazdani1367/next/internal/app/online"
+	"github.com/aliyazdani1367/next/internal/app/searchmatch"
 )
 
 func (s *Server) handleAdminsList(w http.ResponseWriter, r *http.Request) {

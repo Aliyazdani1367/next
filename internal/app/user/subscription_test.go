@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nextpanel/next/internal/app/outboundsub"
+	"github.com/aliyazdani1367/next/internal/app/outboundsub"
 )
 
 func readTestTemplateFile(t *testing.T, relativePath string) string {

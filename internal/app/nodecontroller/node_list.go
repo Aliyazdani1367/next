@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	nodeapp "github.com/nextpanel/next/internal/app/node"
+	nodeapp "github.com/aliyazdani1367/next/internal/app/node"
 )
 
 func (c Controller) List(ctx context.Context, req Request) (NodeListResult, error) {

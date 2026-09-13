@@ -9,7 +9,7 @@ adminOnly: true
 
 Every node has its own panel record and mTLS certificate bundle. Create the record in Next first; the panel generates the bundle that the node installer needs.
 
-<p class="rb-panel-actions"><a class="rb-panel-button" data-primary="true" href="#" data-panel-route="/node-settings">Open Node settings</a><a class="rb-panel-button" href="https://github.com/nextpanel/Next#next-node" target="_blank" rel="noopener noreferrer">View node documentation</a></p>
+<p class="rb-panel-actions"><a class="rb-panel-button" data-primary="true" href="#" data-panel-route="/node-settings">Open Node settings</a><a class="rb-panel-button" href="https://github.com/aliyazdani1367/next#next-node" target="_blank" rel="noopener noreferrer">View node documentation</a></p>
 
 ## Before you start {#section-nodes-admin-intro}
 
@@ -37,7 +37,7 @@ Copy or download the complete **Node install bundle** immediately. It contains b
 Run the binary installer on the node host:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
 ```
 
 1. When the installer asks for the **Node install bundle**, paste the full block copied from the panel. The installer separates the certificate and private key automatically.

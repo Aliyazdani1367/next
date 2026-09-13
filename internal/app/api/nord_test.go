@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	nordvpnapp "github.com/nextpanel/next/internal/app/nordvpn"
+	nordvpnapp "github.com/aliyazdani1367/next/internal/app/nordvpn"
 )
 
 func TestNordSettingsAndAPIRoutes(t *testing.T) {

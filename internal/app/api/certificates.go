@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	certificateapp "github.com/nextpanel/next/internal/app/certificates"
-	"github.com/nextpanel/next/internal/app/logging"
+	certificateapp "github.com/aliyazdani1367/next/internal/app/certificates"
+	"github.com/aliyazdani1367/next/internal/app/logging"
 )
 
 const certificateRequestLimit = 256 << 10

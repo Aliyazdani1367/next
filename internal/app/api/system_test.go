@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	"github.com/nextpanel/next/internal/app/nodecontroller"
-	systemapp "github.com/nextpanel/next/internal/app/system"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	systemapp "github.com/aliyazdani1367/next/internal/app/system"
 )
 
 type fakeSystemMetricsProvider struct {

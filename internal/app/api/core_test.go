@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
 )
 
 func TestCoreRuntimeRouteIsGoNative(t *testing.T) {

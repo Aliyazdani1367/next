@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/api"
-	"github.com/nextpanel/next/internal/app/logging"
-	"github.com/nextpanel/next/internal/gateway"
+	"github.com/aliyazdani1367/next/internal/app/api"
+	"github.com/aliyazdani1367/next/internal/app/logging"
+	"github.com/aliyazdani1367/next/internal/gateway"
 )
 
 func main() {

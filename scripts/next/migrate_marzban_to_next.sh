@@ -7,9 +7,9 @@ OLD_DATA_DIR="/var/lib/marzban"
 NEW_DATA_DIR="/var/lib/next"
 OLD_SERVICE_NAME="marzban"
 NEW_SERVICE_NAME="next"
-SCRIPT_URL="https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next.sh"
 
-PANEL_IMAGE_REPO="nextpanel/next"
+PANEL_IMAGE_REPO="aliyazdani1367/next"
 DEFAULT_IMAGE_TAG="latest"
 PYTHON_BIN=""
 

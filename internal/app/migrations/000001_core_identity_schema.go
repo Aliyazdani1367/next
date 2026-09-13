@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/pressly/goose/v3"
-	"github.com/nextpanel/next/internal/app/node"
+	"github.com/aliyazdani1367/next/internal/app/node"
 )
 
 func init() {

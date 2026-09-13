@@ -119,11 +119,11 @@ func NewMaintenanceServiceWithDeps(runtimeDetector RuntimeDetector, updateChecke
 
 func (s *MaintenanceService) Info(ctx context.Context) (MaintenanceInfo, error) {
 	panel := s.Runtime.Info()
-	panel.Update = ptr(s.Updates.Status(ctx, "nextpanel/Next", panel.Tag, panel.Channel))
+	panel.Update = ptr(s.Updates.Status(ctx, "aliyazdani1367/next", panel.Tag, panel.Channel))
 	return MaintenanceInfo{
 		Panel:      panel,
 		Node:       nil,
-		NodeUpdate: s.Updates.Status(ctx, "nextpanel/Next-node", nil, ""),
+		NodeUpdate: s.Updates.Status(ctx, "aliyazdani1367/next-node", nil, ""),
 	}, nil
 }
 
@@ -262,7 +262,7 @@ func (DefaultRuntimeDetector) Info() RuntimeInfo {
 		if mode == "binary" {
 			image = "next-server (binary)"
 		} else {
-			image = "nextpanel/next"
+			image = "aliyazdani1367/next"
 		}
 	}
 	return RuntimeInfo{

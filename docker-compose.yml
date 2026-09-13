@@ -1,6 +1,6 @@
 services:
   next:
-    image:  nextpanel/next:latest
+    image:  aliyazdani1367/next:latest
     restart: always
     env_file: .env
     network_mode: host

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	"github.com/nextpanel/next/internal/app/usage"
-	userapp "github.com/nextpanel/next/internal/app/user"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	"github.com/aliyazdani1367/next/internal/app/usage"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
 )
 
 type serviceUsageTestPoint struct {

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/nextpanel/Next" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/aliyazdani1367/next" target="_blank" rel="noopener noreferrer">
     <img width="160" height="160" src="./dashboard/src/assets/logo.svg" alt="Next logo">
   </a>
 </p>
@@ -13,19 +13,19 @@
 <br/>
 <p align="center">
   <a href="#">
-    <img src="https://img.shields.io/github/actions/workflow/status/nextpanel/Next/build.yml?style=flat-square" />
+    <img src="https://img.shields.io/github/actions/workflow/status/aliyazdani1367/next/build.yml?style=flat-square" />
   </a>
-  <a href="https://hub.docker.com/r/nextpanel/next" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/nextpanel/next?style=flat-square&logo=docker" />
+  <a href="https://hub.docker.com/r/aliyazdani1367/next" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/aliyazdani1367/next?style=flat-square&logo=docker" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/github/license/nextpanel/Next?style=flat-square" />
+    <img src="https://img.shields.io/github/license/aliyazdani1367/next?style=flat-square" />
   </a>
-  <a href="https://t.me/nextpanel_next" target="_blank">
+  <a href="https://t.me/aliyazdani1367_next" target="_blank">
     <img src="https://img.shields.io/badge/telegram-channel-blue?style=flat-square&logo=telegram" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/github/stars/nextpanel/Next?style=social" />
+    <img src="https://img.shields.io/github/stars/aliyazdani1367/next?style=social" />
   </a>
 </p>
 
@@ -91,7 +91,7 @@ Next is user-friendly, feature-rich and reliable. It lets you create different p
 Install Next master with the binary installer:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
 ```
 
 Do not run the installers with `sudo bash -c "$(curl ...)"`; the downloaded script can exceed Linux's single-argument limit and fail with `Argument list too long`. Always pipe the download into `sudo bash -s --` as shown above.
@@ -99,13 +99,13 @@ Do not run the installers with `sudo bash -c "$(curl ...)"`; the downloaded scri
 For the dev channel, use:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/dev/scripts/next/next-binary.sh | sudo bash -s -- install --dev
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/dev/scripts/next/next-binary.sh | sudo bash -s -- install --dev
 ```
 
 Install Next-node on each node server with the binary node installer:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
 ```
 
 The binary installers create native systemd services and automatically download the matching Linux release asset for the server architecture. The master installer supports SQLite, MySQL, and MariaDB through its install options; the node installer installs only the node runtime and connects it to the master through the certificate/token flow in the panel.
@@ -162,7 +162,7 @@ curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash 
 Clone this project and build the dashboard and Go binaries:
 
 ```bash
-git clone https://github.com/nextpanel/Next.git
+git clone https://github.com/aliyazdani1367/next.git
 cd Next
 cd dashboard
 npm ci
@@ -344,14 +344,14 @@ Made in [Unknown!] and published under [AGPL-3.0](./LICENSE).
 
 We ❤️‍🔥 contributors! If you'd like to contribute, please check out our [Contributing Guidelines](docs/CONTRIBUTING.md) and feel free to submit a pull request or open an issue.
 
-Check [open issues](https://github.com/nextpanel/Next/issues) to help the progress of this project.
+Check [open issues](https://github.com/aliyazdani1367/next/issues) to help the progress of this project.
 
 <p align="center">
 Thanks to the all contributors who have helped improve Next:
 </p>
 <p align="center">
-<a href="https://github.com/nextpanel/Next/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nextpanel/Next" />
+<a href="https://github.com/aliyazdani1367/next/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=aliyazdani1367/next" />
 </a>
 </p>
 <p align="center">

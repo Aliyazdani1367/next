@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/nextpanel/next/internal/app/logging"
-	webhookapp "github.com/nextpanel/next/internal/app/webhook"
+	"github.com/aliyazdani1367/next/internal/app/logging"
+	webhookapp "github.com/aliyazdani1367/next/internal/app/webhook"
 )
 
 const defaultWebhookSendInterval = 30 * time.Second

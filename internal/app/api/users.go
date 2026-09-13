@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/nextpanel/next/internal/app/admin"
-	telegramapp "github.com/nextpanel/next/internal/app/telegram"
-	"github.com/nextpanel/next/internal/app/usage"
-	userapp "github.com/nextpanel/next/internal/app/user"
-	webhookapp "github.com/nextpanel/next/internal/app/webhook"
+	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
+	"github.com/aliyazdani1367/next/internal/app/usage"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	webhookapp "github.com/aliyazdani1367/next/internal/app/webhook"
 )
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {

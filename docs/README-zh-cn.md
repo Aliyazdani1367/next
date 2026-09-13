@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/nextpanel/Next" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/aliyazdani1367/next" target="_blank" rel="noopener noreferrer">
     <img width="160" height="160" src="../dashboard/src/assets/logo.svg" alt="Next logo">
   </a>
 </p>
@@ -13,19 +13,19 @@
 <br/>
 <p align="center">
     <a href="#">
-        <img src="https://img.shields.io/github/actions/workflow/status/nextpanel/Next/build.yml?style=flat-square" />
+        <img src="https://img.shields.io/github/actions/workflow/status/aliyazdani1367/next/build.yml?style=flat-square" />
     </a>
-    <a href="https://hub.docker.com/r/nextpanel/next" target="_blank">
-        <img src="https://img.shields.io/docker/pulls/nextpanel/next?style=flat-square&logo=docker" />
+    <a href="https://hub.docker.com/r/aliyazdani1367/next" target="_blank">
+        <img src="https://img.shields.io/docker/pulls/aliyazdani1367/next?style=flat-square&logo=docker" />
     </a>
     <a href="#">
-        <img src="https://img.shields.io/github/license/nextpanel/Next?style=flat-square" />
+        <img src="https://img.shields.io/github/license/aliyazdani1367/next?style=flat-square" />
     </a>
-    <a href="https://t.me/nextpanel_next" target="_blank">
+    <a href="https://t.me/aliyazdani1367_next" target="_blank">
         <img src="https://img.shields.io/badge/telegram-channel-blue?style=flat-square&logo=telegram" />
     </a>
     <a href="#">
-        <img src="https://img.shields.io/github/stars/nextpanel/Next?style=social" />
+        <img src="https://img.shields.io/github/stars/aliyazdani1367/next?style=social" />
     </a>
 </p>
 
@@ -92,13 +92,13 @@ Next 是一个用户友好、功能丰富且可靠的工具。它让您可以为
 使用二进制安装脚本安装 Next master：
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
 ```
 
 在每台 node 服务器上使用二进制 node 安装脚本安装 Next-node：
 
 ```bash
-curl -sL https://raw.githubusercontent.com/nextpanel/Next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
 ```
 
 二进制安装脚本会创建 native systemd 服务，并自动下载适合服务器架构的 Linux binary。Master 通过安装参数支持 SQLite、MySQL 和 MariaDB；node 安装脚本只安装 node runtime，并通过面板中的 certificate/token flow 连接到 Master。
@@ -109,7 +109,7 @@ Once the installation is complete:
 - The Next files will be located at `/opt/next`
 - The configuration file can be found at `/opt/next/.env` (refer to [configurations](#configuration) section to see variables)
 - The data files will be placed at `/usr/lib/next`
-- For security reasons, the Next dashboard is not accessible via IP address. Therefore, you must [obtain SSL certificate](https://nextpanel.github.io/next/en/examples/issue-ssl-certificate) and access your Next dashboard by opening a web browser and navigating to `https://YOUR_DOMAIN:8000/dashboard/` (replace YOUR_DOMAIN with your actual domain)
+- For security reasons, the Next dashboard is not accessible via IP address. Therefore, you must [obtain SSL certificate](https://aliyazdani1367.github.io/next/en/examples/issue-ssl-certificate) and access your Next dashboard by opening a web browser and navigating to `https://YOUR_DOMAIN:8000/dashboard/` (replace YOUR_DOMAIN with your actual domain)
 - You can also use SSH port forwarding to access the Next dashboard locally without a domain. Replace `user@serverip` with your actual SSH username and server IP and Run the command below:
 
 ```bash
@@ -151,7 +151,7 @@ curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash 
 克隆项目并构建 dashboard 和 Go 二进制文件：
 
 ```bash
-git clone https://github.com/nextpanel/Next.git
+git clone https://github.com/aliyazdani1367/next.git
 cd Next
 cd dashboard
 npm ci
@@ -321,9 +321,9 @@ Next 配备了一个集成的 Telegram bot，可以处理服务器管理、用�
 
 # 贡献者
 
-我们热爱贡献者！如果您想做出贡献，请查看我们的[贡献指南](CONTRIBUTING.md)并随时提交拉取请求或打开问题。我们也欢迎您加入我们的 [Telegram](https://t.me/nextpanel_next) 群组，以获得支持或贡献指导。
+我们热爱贡献者！如果您想做出贡献，请查看我们的[贡献指南](CONTRIBUTING.md)并随时提交拉取请求或打开问题。我们也欢迎您加入我们的 [Telegram](https://t.me/aliyazdani1367_next) 群组，以获得支持或贡献指导。
 
-查看 [issues](https://github.com/nextpanel/Next/issues) 以帮助改进这个项目。
+查看 [issues](https://github.com/aliyazdani1367/next/issues) 以帮助改进这个项目。
 
 
 
@@ -331,8 +331,8 @@ Next 配备了一个集成的 Telegram bot，可以处理服务器管理、用�
 感谢所有为改善 Next 做出贡献的贡献者们：
 </p>
 <p align="center">
-<a href="https://github.com/nextpanel/Next/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nextpanel/Next" />
+<a href="https://github.com/aliyazdani1367/next/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=aliyazdani1367/next" />
 </a>
 </p>
 <p align="center">

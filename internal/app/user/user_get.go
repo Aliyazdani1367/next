@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nextpanel/next/internal/app/online"
+	"github.com/aliyazdani1367/next/internal/app/online"
 )
 
 func (r Repository) UserGet(ctx context.Context, req UserGetRequest) (UserDetail, error) {

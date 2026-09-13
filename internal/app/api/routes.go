@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	externalapps "github.com/nextpanel/next/internal/app/externalapps"
+	externalapps "github.com/aliyazdani1367/next/internal/app/externalapps"
 )
 
 const (

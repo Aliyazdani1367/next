@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/nextpanel/next/internal/app/nodecontroller"
-	userapp "github.com/nextpanel/next/internal/app/user"
+	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
 )
 
 type liveUserSpeed struct {

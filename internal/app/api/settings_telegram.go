@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	telegramapp "github.com/nextpanel/next/internal/app/telegram"
+	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
 )
 
 func (s *Server) handleTelegramSettings(w http.ResponseWriter, r *http.Request) {

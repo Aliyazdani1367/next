@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	nodev1 "github.com/nextpanel/next/internal/proto/node/v1"
+	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
 )
 
 func TestAddUserWithoutMatchingServiceInboundIsNoOp(t *testing.T) {

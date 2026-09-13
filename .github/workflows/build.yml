@@ -67,11 +67,11 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tags="ghcr.io/nextpanel/next:latest"$'\n'"ghcr.io/nextpanel/next:${GITHUB_REF_NAME}"
+          tags="ghcr.io/aliyazdani1367/next:latest"$'\n'"ghcr.io/aliyazdani1367/next:${GITHUB_REF_NAME}"
           dockerhub_enabled=false
           if [[ -n "${DOCKERHUB_USERNAME}" && -n "${DOCKERHUB_TOKEN}" ]]; then
             dockerhub_enabled=true
-            tags="${tags}"$'\n'"nextpanel/next:latest"$'\n'"nextpanel/next:${GITHUB_REF_NAME}"
+            tags="${tags}"$'\n'"aliyazdani1367/next:latest"$'\n'"aliyazdani1367/next:${GITHUB_REF_NAME}"
           fi
           echo "dockerhub_enabled=${dockerhub_enabled}" >> "${GITHUB_OUTPUT}"
           {
@@ -94,9 +94,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tags="ghcr.io/nextpanel/next:latest"$'\n'"ghcr.io/nextpanel/next:${GITHUB_REF_NAME}"
+          tags="ghcr.io/aliyazdani1367/next:latest"$'\n'"ghcr.io/aliyazdani1367/next:${GITHUB_REF_NAME}"
           if [[ "${{ steps.dockerhub_login.outcome }}" == "success" ]]; then
-            tags="${tags}"$'\n'"nextpanel/next:latest"$'\n'"nextpanel/next:${GITHUB_REF_NAME}"
+            tags="${tags}"$'\n'"aliyazdani1367/next:latest"$'\n'"aliyazdani1367/next:${GITHUB_REF_NAME}"
           fi
           {
             echo "tags<<EOF"

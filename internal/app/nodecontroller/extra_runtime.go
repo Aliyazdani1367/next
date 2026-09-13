@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	userapp "github.com/nextpanel/next/internal/app/user"
-	"github.com/nextpanel/next/internal/app/xrayconfig"
+	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
 )
 
 type ExtraRuntime struct {
