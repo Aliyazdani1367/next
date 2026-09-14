@@ -58,6 +58,7 @@ type Server struct {
 	webhookRepo          webhookapp.Repository
 	webhookDispatch      webhookapp.Dispatcher
 	backupService        *backupapp.Service
+	userMigration        userMigrationRegistry
 	certificateManager   *certificateapp.Manager
 	externalApps         *externalapps.Manager
 	backgroundOnce       sync.Once
