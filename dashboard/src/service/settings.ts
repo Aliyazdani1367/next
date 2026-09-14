@@ -711,6 +711,71 @@ export const importNextBackup = async (
 	});
 };
 
+export interface UserMigrationAdminSummary {
+	username: string;
+	user_count: number;
+}
+
+export interface UserMigrationInspectResponse {
+	token: string;
+	admins: UserMigrationAdminSummary[];
+}
+
+export interface UserMigrationSkip {
+	username: string;
+	reason: string;
+}
+
+export interface UserMigrationImportResponse {
+	total: number;
+	imported: number;
+	skipped: UserMigrationSkip[];
+}
+
+export const inspectUserMigrationBackup = async (
+	file: File,
+	onProgress?: (percent: number) => void,
+): Promise<UserMigrationInspectResponse> => {
+	return new Promise((resolve, reject) => {
+		const body = new FormData();
+		body.append("file", file);
+		const xhr = new XMLHttpRequest();
+		const baseURL = (apiBaseURL || "/api").replace(/\/$/, "");
+		xhr.open("POST", `${baseURL}/settings/user-migration/inspect`);
+		xhr.withCredentials = true;
+		xhr.responseType = "json";
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable) {
+				onProgress?.(
+					Math.min(100, Math.round((event.loaded / event.total) * 100)),
+				);
+			}
+		};
+		xhr.upload.onload = () => onProgress?.(100);
+		xhr.onload = () => {
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve(xhr.response as UserMigrationInspectResponse);
+				return;
+			}
+			reject({ response: { _data: xhr.response } });
+		};
+		xhr.onerror = () => reject(new Error("Backup upload failed"));
+		onProgress?.(0);
+		xhr.send(body);
+	});
+};
+
+export const importUserMigration = async (payload: {
+	token: string;
+	source_admin_username: string;
+	service_id: number;
+}): Promise<UserMigrationImportResponse> => {
+	return apiFetch("/settings/user-migration/import", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+};
+
 export const getSubscriptionSettings =
 	async (): Promise<SubscriptionSettingsBundle> => {
 		return apiFetch("/settings/subscriptions");

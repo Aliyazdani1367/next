@@ -39,6 +39,7 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ApexOptions } from "apexcharts";
 import { AccountSecurity } from "components/AccountSecurity";
+import { UserMigrationPanel } from "components/UserMigrationPanel";
 import { ChartBox } from "components/common/ChartBox";
 import {
 	DateRangePicker,
@@ -78,12 +79,13 @@ import { clearClientSession } from "utils/session";
 dayjs.extend(utc);
 const CopyIcon = chakra(ClipboardIcon, { baseStyle: { w: 4, h: 4 } });
 const DeleteIcon = chakra(TrashIcon, { baseStyle: { w: 4, h: 4 } });
-type AccountSection = "info" | "security" | "api_keys";
+type AccountSection = "info" | "security" | "api_keys" | "import_users";
 
 const ACCOUNT_SECTION_HASH: Record<AccountSection, string> = {
 	info: "info",
 	security: "security",
 	api_keys: "api-keys",
+	import_users: "import-users",
 };
 
 const accountSectionFromHash = (): AccountSection | null => {
@@ -678,6 +680,10 @@ export const MyAccountPage: React.FC = () => {
 						},
 					]
 				: []),
+			{
+				id: "import_users" as const,
+				label: t("myaccount.importUsers.tabLabel"),
+			},
 		],
 		[canViewSecurity, selfPermissions.self_api_keys, t],
 	);
@@ -1336,6 +1342,10 @@ export const MyAccountPage: React.FC = () => {
 							</Stack>
 						</TabPanel>
 					)}
+
+					<TabPanel p={0}>
+						<UserMigrationPanel />
+					</TabPanel>
 				</TabPanels>
 			</Tabs>
 
