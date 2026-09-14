@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 	"golang.org/x/net/websocket"
 )
 

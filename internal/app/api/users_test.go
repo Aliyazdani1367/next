@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
+	userapp "github.com/aliking1367/next/internal/app/user"
 )
 
 func testUserReadServer(t *testing.T) (*Server, *sql.DB) {

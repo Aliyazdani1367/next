@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/usage"
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/usage"
+	userapp "github.com/aliking1367/next/internal/app/user"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 type serviceHostAssignment struct {

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {

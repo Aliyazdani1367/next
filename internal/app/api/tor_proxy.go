@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	"github.com/aliking1367/next/internal/app/logging"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
 )
 
 var torCountryPattern = regexp.MustCompile(`^[a-zA-Z]{2}$`)

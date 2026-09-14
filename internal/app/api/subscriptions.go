@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	userapp "github.com/aliking1367/next/internal/app/user"
 )
 
 func (s *Server) handleSubscriptionPath(w http.ResponseWriter, r *http.Request) {

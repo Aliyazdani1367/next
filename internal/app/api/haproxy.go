@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
 )
 
 const maxHAProxyTemplateUpload = 32 << 20

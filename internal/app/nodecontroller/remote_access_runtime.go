@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	userapp "github.com/aliking1367/next/internal/app/user"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 type RemoteAccessRuntime struct {

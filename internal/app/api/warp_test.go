@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	warpapp "github.com/aliyazdani1367/next/internal/app/warp"
+	warpapp "github.com/aliking1367/next/internal/app/warp"
 )
 
 func TestWarpGetEmptyAccount(t *testing.T) {

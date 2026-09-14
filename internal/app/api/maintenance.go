@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	systemapp "github.com/aliyazdani1367/next/internal/app/system"
+	systemapp "github.com/aliking1367/next/internal/app/system"
 	"golang.org/x/net/websocket"
 )
 

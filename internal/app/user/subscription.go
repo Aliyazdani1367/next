@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/flosch/pongo2/v6"
-	outboundsubapp "github.com/aliyazdani1367/next/internal/app/outboundsub"
-	"github.com/aliyazdani1367/next/internal/app/usage"
+	outboundsubapp "github.com/aliking1367/next/internal/app/outboundsub"
+	"github.com/aliking1367/next/internal/app/usage"
 )
 
 type SubscriptionClientConfig struct {

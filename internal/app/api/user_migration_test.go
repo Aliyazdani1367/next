@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	backupapp "github.com/aliking1367/next/internal/app/backup"
 )
 
 // buildTestArchiveBytes mirrors the on-disk layout backupapp.Export produces

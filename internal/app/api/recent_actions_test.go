@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 func createRecentActionsTable(t *testing.T, db *sql.DB) {

@@ -216,7 +216,7 @@ jobs:
                   IMG_RAW=$(echo "$RAW_LINE" | grep -oE 'ghcr\.io[^ ]*next:dev@sha256:[0-9a-f]+' || true)
                   if [[ -n "$IMG_RAW" ]]; then
                     DIGEST=$(echo "$IMG_RAW" | sed 's/.*next:dev@//')
-                    IMAGE_REF="ghcr.io/aliyazdani1367/next:dev@$DIGEST"
+                    IMAGE_REF="ghcr.io/aliking1367/next:dev@$DIGEST"
                     IMAGE_REF_ESC=$(html_escape "$IMAGE_REF")
                   fi
                 fi
@@ -247,7 +247,7 @@ jobs:
                   IMG_RAW=$(echo "$RAW_LINE" | grep -oE 'ghcr\.io[^ ]*next:dev@sha256:[0-9a-f]+' | head -n 1 || true)
                   if [[ -n "$IMG_RAW" ]]; then
                     DIGEST=$(echo "$IMG_RAW" | sed 's/.*next:dev@//')
-                    IMAGE_REF="ghcr.io/aliyazdani1367/next:dev@$DIGEST"
+                    IMAGE_REF="ghcr.io/aliking1367/next:dev@$DIGEST"
                     IMAGE_REF_ESC=$(html_escape "$IMAGE_REF")
                   fi
                 fi

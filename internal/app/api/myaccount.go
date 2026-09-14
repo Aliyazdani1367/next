@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
 )
 
 type changePasswordPayload struct {

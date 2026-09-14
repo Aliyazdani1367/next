@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyazdani1367/next/internal/app/migrations"
+	"github.com/aliking1367/next/internal/app/migrations"
 	_ "modernc.org/sqlite"
 )
 

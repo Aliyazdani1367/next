@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
-	systemapp "github.com/aliyazdani1367/next/internal/app/system"
+	backupapp "github.com/aliking1367/next/internal/app/backup"
+	systemapp "github.com/aliking1367/next/internal/app/system"
 )
 
 const maxBackupUploadBytes int64 = 128 << 20

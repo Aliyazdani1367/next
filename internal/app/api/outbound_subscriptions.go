@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	outboundsubapp "github.com/aliyazdani1367/next/internal/app/outboundsub"
+	"github.com/aliking1367/next/internal/app/logging"
+	outboundsubapp "github.com/aliking1367/next/internal/app/outboundsub"
 )
 
 func (s *Server) handleOutboundSubscriptions(w http.ResponseWriter, r *http.Request) {

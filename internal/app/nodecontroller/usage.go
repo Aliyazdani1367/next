@@ -12,7 +12,7 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
-	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
+	nodev1 "github.com/aliking1367/next/internal/proto/node/v1"
 )
 
 const (

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
 	_ "modernc.org/sqlite"
 )
 

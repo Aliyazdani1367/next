@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	externalapps "github.com/aliyazdani1367/next/internal/app/externalapps"
+	externalapps "github.com/aliking1367/next/internal/app/externalapps"
 )
 
 const maxExternalAppResponseBytes = 64 << 20

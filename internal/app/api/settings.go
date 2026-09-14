@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	settingsapp "github.com/aliyazdani1367/next/internal/app/settings"
-	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
+	settingsapp "github.com/aliking1367/next/internal/app/settings"
+	telegramapp "github.com/aliking1367/next/internal/app/telegram"
 )
 
 type allSettingsRequest struct {

@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/nodeclient"
-	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
+	"github.com/aliking1367/next/internal/app/nodeclient"
+	nodev1 "github.com/aliking1367/next/internal/proto/node/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/aliyazdani1367/next/internal/app/online"
+	"github.com/aliking1367/next/internal/app/online"
 )
 
 const (

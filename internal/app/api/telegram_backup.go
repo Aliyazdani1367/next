@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
+	backupapp "github.com/aliking1367/next/internal/app/backup"
+	"github.com/aliking1367/next/internal/app/logging"
+	telegramapp "github.com/aliking1367/next/internal/app/telegram"
 )
 
 const defaultTelegramBackupCheckInterval = time.Minute

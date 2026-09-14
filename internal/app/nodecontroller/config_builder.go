@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	userread "github.com/aliyazdani1367/next/internal/app/user"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	"github.com/aliking1367/next/internal/app/logging"
+	userread "github.com/aliking1367/next/internal/app/user"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 var proxyProtocols = map[string]struct{}{

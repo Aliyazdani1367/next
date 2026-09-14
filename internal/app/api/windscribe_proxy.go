@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
 )
 
 var windscribeTagPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)

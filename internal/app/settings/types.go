@@ -1,6 +1,6 @@
 package settings
 
-import certificateapp "github.com/aliyazdani1367/next/internal/app/certificates"
+import certificateapp "github.com/aliking1367/next/internal/app/certificates"
 
 type ClientRoutingRule struct {
 	Pattern string `json:"pattern"`

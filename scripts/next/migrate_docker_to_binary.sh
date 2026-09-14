@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-NEXT_REPO="${NEXT_REPO:-aliyazdani1367/next}"
+NEXT_REPO="${NEXT_REPO:-aliking1367/next}"
 NEXT_REF="${NEXT_REF:-master}"
 SCRIPT_URL="${NEXT_SCRIPT_URL:-https://raw.githubusercontent.com/${NEXT_REPO}/${NEXT_REF}/scripts/next/next.sh}"
 

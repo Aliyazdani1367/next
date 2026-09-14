@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	dashboardapp "github.com/aliyazdani1367/next/internal/app/dashboard"
-	telegrambot "github.com/aliyazdani1367/next/internal/app/telegram/bot"
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	dashboardapp "github.com/aliking1367/next/internal/app/dashboard"
+	telegrambot "github.com/aliking1367/next/internal/app/telegram/bot"
+	userapp "github.com/aliking1367/next/internal/app/user"
 )
 
 // botSettingsSource adapts the Telegram repository to the bot's SettingsSource.

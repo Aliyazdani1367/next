@@ -64,5 +64,5 @@ jobs:
           platforms: linux/amd64
           push: false
           tags: |
-            aliyazdani1367/next:pr-${{ github.event.pull_request.number }}
-            ghcr.io/aliyazdani1367/next:pr-${{ github.event.pull_request.number }}
+            aliking1367/next:pr-${{ github.event.pull_request.number }}
+            ghcr.io/aliking1367/next:pr-${{ github.event.pull_request.number }}

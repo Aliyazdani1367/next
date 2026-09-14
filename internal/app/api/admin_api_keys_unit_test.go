@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/migrations"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/migrations"
 	_ "modernc.org/sqlite"
 )
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
 )
 
 func (s *Server) handleAdminAPIKeyPath(w http.ResponseWriter, r *http.Request, username, suffix string) bool {

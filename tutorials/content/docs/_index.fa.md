@@ -19,8 +19,8 @@ cascade:
 - حساب من: کلید API، تغییر رمز، گزارش مصرف روزانه و مصرف هر نود.
 - کد منبع باز است؛ اگر مفید بود در گیت‌هاب ستاره بدهید.
 
-- [گیت‌هاب](https://github.com/aliyazdani1367/next)
-- [تلگرام](https://t.me/aliyazdani1367)
+- [گیت‌هاب](https://github.com/aliking1367/next)
+- [تلگرام](https://t.me/aliking1367)
 
 ## شروع از یک کار مشخص
 

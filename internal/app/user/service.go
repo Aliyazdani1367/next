@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	settingsapp "github.com/aliyazdani1367/next/internal/app/settings"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	settingsapp "github.com/aliking1367/next/internal/app/settings"
 )
 
 type SubscriptionTemplateReader interface {

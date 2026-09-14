@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
+	"github.com/aliking1367/next/internal/app/logging"
 )
 
 var nextScriptPath = "/usr/local/bin/next"

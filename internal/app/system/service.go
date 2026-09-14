@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	dashboardapp "github.com/aliyazdani1367/next/internal/app/dashboard"
+	dashboardapp "github.com/aliking1367/next/internal/app/dashboard"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"

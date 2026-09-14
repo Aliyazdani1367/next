@@ -140,14 +140,14 @@ ensure_valid_app_name
 
 LAST_XRAY_CORES=5
 
-NEXT_REPO="${NEXT_REPO:-aliyazdani1367/next}"
+NEXT_REPO="${NEXT_REPO:-aliking1367/next}"
 NEXT_REF="${NEXT_REF:-master}"
 NEXT_SCRIPT_BASE_URL_EXPLICIT=0
 if [ -n "${NEXT_SCRIPT_BASE_URL+x}" ]; then
     NEXT_SCRIPT_BASE_URL_EXPLICIT=1
 fi
 NEXT_SCRIPT_BASE_URL="${NEXT_SCRIPT_BASE_URL:-https://raw.githubusercontent.com/${NEXT_REPO}/${NEXT_REF}/scripts/next}"
-NEXT_NODE_RELEASE_REPO="${NEXT_NODE_RELEASE_REPO:-aliyazdani1367/next-node}"
+NEXT_NODE_RELEASE_REPO="${NEXT_NODE_RELEASE_REPO:-aliking1367/next-node}"
 NEXT_NODE_BINARY_DEV_BRANCH="${NEXT_NODE_BINARY_DEV_BRANCH:-dev}"
 NEXT_NODE_BINARY_DEV_RELEASE_TAG="${NEXT_NODE_BINARY_DEV_RELEASE_TAG:-dev-binaries}"
 NEXT_NODE_BINARY_WORKFLOW_NAME="${NEXT_NODE_BINARY_WORKFLOW_NAME:-binary-build}"
@@ -467,7 +467,7 @@ discover_node_instances() {
     DISCOVERED_NODE_PATHS=()
     DISCOVERED_NODE_NAMES=()
     while IFS= read -r -d '' compose; do
-        if ! grep -qi "aliyazdani1367/next-node" "$compose"; then
+        if ! grep -qi "aliking1367/next-node" "$compose"; then
             continue
         fi
         local dir name
@@ -534,12 +534,12 @@ set_branch_variables() {
         dev|development)
             BRANCH="dev"
             IMAGE_TAG="dev"
-            DOCKER_IMAGE="aliyazdani1367/next-node:dev"
+            DOCKER_IMAGE="aliking1367/next-node:dev"
         ;;
         *)
             BRANCH="master"
             IMAGE_TAG="latest"
-            DOCKER_IMAGE="aliyazdani1367/next-node:latest"
+            DOCKER_IMAGE="aliking1367/next-node:latest"
         ;;
     esac
     SCRIPT_BRANCH="$BRANCH"
@@ -746,7 +746,7 @@ select_node_version() {
 BRANCH="master"
 IMAGE_TAG="latest"
 SCRIPT_BRANCH="master"
-DOCKER_IMAGE="aliyazdani1367/next-node:latest"
+DOCKER_IMAGE="aliking1367/next-node:latest"
 SCRIPT_URL="$NEXT_SCRIPT_BASE_URL/$NEXT_NODE_SCRIPT_SOURCE_FILE"
 if [ -f "$BRANCH_FILE" ]; then
     saved_branch=$(tr -d '[:space:]' < "$BRANCH_FILE")
@@ -1640,12 +1640,12 @@ update_next_node() {
             ;;
             *)
                 set_branch_variables master
-                DOCKER_IMAGE="aliyazdani1367/next-node:${requested_version}"
+                DOCKER_IMAGE="aliking1367/next-node:${requested_version}"
             ;;
         esac
         echo "$BRANCH" > "$BRANCH_FILE"
         if [ -f "$COMPOSE_FILE" ]; then
-            sed -i "s|^[[:space:]]*image:.*aliyazdani1367/next-node.*|    image: $DOCKER_IMAGE|" "$COMPOSE_FILE"
+            sed -i "s|^[[:space:]]*image:.*aliking1367/next-node.*|    image: $DOCKER_IMAGE|" "$COMPOSE_FILE"
         fi
     fi
     $COMPOSE -f $COMPOSE_FILE -p "$APP_NAME" pull
@@ -2010,7 +2010,7 @@ update_command() {
             ;;
             *)
                 set_branch_variables master
-                DOCKER_IMAGE="aliyazdani1367/next-node:${node_version}"
+                DOCKER_IMAGE="aliking1367/next-node:${node_version}"
             ;;
         esac
         echo "$BRANCH" > "$BRANCH_FILE"

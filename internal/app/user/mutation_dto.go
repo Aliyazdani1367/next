@@ -1,6 +1,6 @@
 package user
 
-import adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+import adminapp "github.com/aliking1367/next/internal/app/admin"
 
 type UserStatus string
 

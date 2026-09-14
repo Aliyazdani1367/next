@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	certificateapp "github.com/aliyazdani1367/next/internal/app/certificates"
+	certificateapp "github.com/aliking1367/next/internal/app/certificates"
 )
 
 const (

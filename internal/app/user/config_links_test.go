@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	outboundsubapp "github.com/aliyazdani1367/next/internal/app/outboundsub"
+	outboundsubapp "github.com/aliking1367/next/internal/app/outboundsub"
 )
 
 func assertSIP002UserInfo(t *testing.T, link, want string) {

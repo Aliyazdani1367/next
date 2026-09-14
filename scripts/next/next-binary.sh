@@ -20,7 +20,7 @@ COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 ENV_FILE="$APP_DIR/.env"
 LAST_XRAY_CORES=10
 CERTS_BASE="/var/lib/$APP_NAME/certs"
-NEXT_REPO="${NEXT_REPO:-aliyazdani1367/next}"
+NEXT_REPO="${NEXT_REPO:-aliking1367/next}"
 NEXT_REF="${NEXT_REF:-master}"
 NEXT_RAW_BASE="${NEXT_RAW_BASE:-https://raw.githubusercontent.com/${NEXT_REPO}/${NEXT_REF}}"
 NEXT_SCRIPT_BASE_URL_EXPLICIT=0
@@ -28,7 +28,7 @@ if [ -n "${NEXT_SCRIPT_BASE_URL+x}" ]; then
     NEXT_SCRIPT_BASE_URL_EXPLICIT=1
 fi
 NEXT_SCRIPT_BASE_URL="${NEXT_SCRIPT_BASE_URL:-${NEXT_RAW_BASE}/scripts/next}"
-NEXT_RELEASE_REPO="${NEXT_RELEASE_REPO:-aliyazdani1367/next}"
+NEXT_RELEASE_REPO="${NEXT_RELEASE_REPO:-aliking1367/next}"
 NEXT_BINARY_DEV_BRANCH="${NEXT_BINARY_DEV_BRANCH:-dev}"
 NEXT_BINARY_WORKFLOW_NAME="${NEXT_BINARY_WORKFLOW_NAME:-binary-build}"
 NEXT_BINARY_DEV_MANIFEST_BRANCH="${NEXT_BINARY_DEV_MANIFEST_BRANCH:-dev-build-manifest}"
@@ -418,7 +418,7 @@ get_current_next_version() {
         version=$(tr -d '[:space:]' < "$CHANNEL_FILE")
     fi
     if [ -z "$version" ] && [ -f "$COMPOSE_FILE" ]; then
-        version=$(grep -E "image:.*aliyazdani1367/next:" "$COMPOSE_FILE" | head -n 1 | sed -E 's/.*aliyazdani1367\/next:([^"[:space:]]+).*/\1/')
+        version=$(grep -E "image:.*aliking1367/next:" "$COMPOSE_FILE" | head -n 1 | sed -E 's/.*aliking1367\/next:([^"[:space:]]+).*/\1/')
     fi
     printf '%s\n' "${version:-unknown}"
 }
@@ -832,7 +832,7 @@ get_installed_next_channel() {
     fi
 
     if [ -f "$COMPOSE_FILE" ]; then
-        image_tag=$(grep -E "image:.*aliyazdani1367/next:" "$COMPOSE_FILE" | head -n 1 | sed -E 's/.*aliyazdani1367\/next:([^"[:space:]]+).*/\1/')
+        image_tag=$(grep -E "image:.*aliking1367/next:" "$COMPOSE_FILE" | head -n 1 | sed -E 's/.*aliking1367\/next:([^"[:space:]]+).*/\1/')
         if [ -n "$image_tag" ]; then
             echo "$image_tag"
             return
@@ -2911,7 +2911,7 @@ install_next() {
         cat > "$docker_file_path" <<EOF
 services:
   next:
-    image: aliyazdani1367/next:${next_version}
+    image: aliking1367/next:${next_version}
     restart: always
     env_file: .env
     network_mode: host
@@ -3010,7 +3010,7 @@ EOF
         cat > "$docker_file_path" <<EOF
 services:
   next:
-    image: aliyazdani1367/next:${next_version}
+    image: aliking1367/next:${next_version}
     restart: always
     env_file: .env
     network_mode: host
@@ -3114,9 +3114,9 @@ EOF
 
         # Install requested version
         if [ "$next_version" == "latest" ]; then
-            yq -i '.services.next.image = "aliyazdani1367/next:latest"' "$docker_file_path"
+            yq -i '.services.next.image = "aliking1367/next:latest"' "$docker_file_path"
         else
-            yq -i ".services.next.image = \"aliyazdani1367/next:${next_version}\"" "$docker_file_path"
+            yq -i ".services.next.image = \"aliking1367/next:${next_version}\"" "$docker_file_path"
         fi
         echo "Installing $next_version version"
         colorized_echo green "File saved in $APP_DIR/docker-compose.yml"
@@ -4703,9 +4703,9 @@ set_compose_next_image_tag() {
     fi
 
     if [ "$next_version" = "latest" ]; then
-        yq -i '.services.next.image = "aliyazdani1367/next:latest"' "$COMPOSE_FILE"
+        yq -i '.services.next.image = "aliking1367/next:latest"' "$COMPOSE_FILE"
     else
-        yq -i ".services.next.image = \"aliyazdani1367/next:${next_version}\"" "$COMPOSE_FILE"
+        yq -i ".services.next.image = \"aliking1367/next:${next_version}\"" "$COMPOSE_FILE"
     fi
 }
 

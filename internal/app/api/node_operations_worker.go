@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
+	"github.com/aliking1367/next/internal/app/logging"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
 )
 
 const defaultNodeOperationsPollInterval = 15 * time.Second

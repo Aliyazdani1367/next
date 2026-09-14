@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/aliyazdani1367/next/internal/app/logging"
+	"github.com/aliking1367/next/internal/app/logging"
 )
 
 func checkDatabaseIntegrity(ctx context.Context, db *sql.DB) error {

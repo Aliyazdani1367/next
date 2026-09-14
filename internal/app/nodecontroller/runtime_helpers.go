@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
+	nodev1 "github.com/aliking1367/next/internal/proto/node/v1"
 )
 
 func (c Controller) PublicIPs(ctx context.Context, req Request) (PublicIPsResult, error) {

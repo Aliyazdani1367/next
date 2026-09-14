@@ -20,15 +20,15 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
-	certificateapp "github.com/aliyazdani1367/next/internal/app/certificates"
-	nodeapp "github.com/aliyazdani1367/next/internal/app/node"
-	"github.com/aliyazdani1367/next/internal/app/nodecontroller"
-	settingsapp "github.com/aliyazdani1367/next/internal/app/settings"
-	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
-	warpapp "github.com/aliyazdani1367/next/internal/app/warp"
-	"github.com/aliyazdani1367/next/internal/app/xrayconfig"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	backupapp "github.com/aliking1367/next/internal/app/backup"
+	certificateapp "github.com/aliking1367/next/internal/app/certificates"
+	nodeapp "github.com/aliking1367/next/internal/app/node"
+	"github.com/aliking1367/next/internal/app/nodecontroller"
+	settingsapp "github.com/aliking1367/next/internal/app/settings"
+	telegramapp "github.com/aliking1367/next/internal/app/telegram"
+	warpapp "github.com/aliking1367/next/internal/app/warp"
+	"github.com/aliking1367/next/internal/app/xrayconfig"
 )
 
 func testAdminServer(t *testing.T) (*Server, *sql.DB) {

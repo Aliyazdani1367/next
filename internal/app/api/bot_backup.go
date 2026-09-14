@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	backupapp "github.com/aliyazdani1367/next/internal/app/backup"
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	telegrambot "github.com/aliyazdani1367/next/internal/app/telegram/bot"
+	backupapp "github.com/aliking1367/next/internal/app/backup"
+	"github.com/aliking1367/next/internal/app/logging"
+	telegrambot "github.com/aliking1367/next/internal/app/telegram/bot"
 )
 
 // botBackupService adapts the panel's backup engine and Telegram delivery to

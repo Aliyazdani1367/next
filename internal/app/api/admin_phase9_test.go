@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
 )
 
 func TestPhase9AdminLoginRolesAndStandardPermissionEnforcement(t *testing.T) {

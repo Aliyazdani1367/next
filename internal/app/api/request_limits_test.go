@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyazdani1367/next/internal/app/externalapps"
+	"github.com/aliking1367/next/internal/app/externalapps"
 )
 
 func TestAPIRequestBodyLimitRejectsLargeDeclaredBody(t *testing.T) {

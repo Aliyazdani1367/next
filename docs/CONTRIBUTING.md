@@ -6,7 +6,7 @@ Thanks for considering a contribution to Next.
 
 Please avoid opening issues for support questions. Use one of these channels instead:
 
-- Telegram channel: [@aliyazdani1367_next](https://t.me/aliyazdani1367_next)
+- Telegram channel: [@aliking1367_next](https://t.me/aliking1367_next)
 - GitHub Discussions for longer-term design or operational questions.
 
 ## Reporting Issues

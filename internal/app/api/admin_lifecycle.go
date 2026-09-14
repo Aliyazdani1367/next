@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/logging"
-	userapp "github.com/aliyazdani1367/next/internal/app/user"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/logging"
+	userapp "github.com/aliking1367/next/internal/app/user"
 )
 
 const defaultAdminLifecycleInterval = 30 * time.Second

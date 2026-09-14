@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/aliyazdani1367/next" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/aliking1367/next" target="_blank" rel="noopener noreferrer">
     <img width="160" height="160" src="../dashboard/src/assets/logo.svg" alt="Next logo">
   </a>
 </p>
@@ -13,19 +13,19 @@
 <br/>
 <p align="center">
   <a href="#">
-    <img src="https://img.shields.io/github/actions/workflow/status/aliyazdani1367/next/build.yml?style=flat-square" />
+    <img src="https://img.shields.io/github/actions/workflow/status/aliking1367/next/build.yml?style=flat-square" />
   </a>
-  <a href="https://hub.docker.com/r/aliyazdani1367/next" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/aliyazdani1367/next?style=flat-square&logo=docker" />
+  <a href="https://hub.docker.com/r/aliking1367/next" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/aliking1367/next?style=flat-square&logo=docker" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/github/license/aliyazdani1367/next?style=flat-square" />
+    <img src="https://img.shields.io/github/license/aliking1367/next?style=flat-square" />
   </a>
-  <a href="https://t.me/aliyazdani1367_next" target="_blank">
+  <a href="https://t.me/aliking1367_next" target="_blank">
     <img src="https://img.shields.io/badge/telegram-channel-blue?style=flat-square&logo=telegram" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/github/stars/aliyazdani1367/next?style=social" />
+    <img src="https://img.shields.io/github/stars/aliking1367/next?style=social" />
   </a>
 </p>
 
@@ -92,7 +92,7 @@
 برای نصب باینری Master رِبِکا:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliking1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
 ```
 
 نصاب‌ها را با `sudo bash -c "$(curl ...)"` اجرا نکنید؛ متن اسکریپت ممکن است از محدودیت single argument لینوکس بزرگ‌تر شود و خطای `Argument list too long` بدهد. همیشه دانلود را مثل نمونه بالا به `sudo bash -s --` pipe کنید.
@@ -100,13 +100,13 @@ curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/ne
 برای نصب کانال dev:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/dev/scripts/next/next-binary.sh | sudo bash -s -- install --dev
+curl -sL https://raw.githubusercontent.com/aliking1367/next/dev/scripts/next/next-binary.sh | sudo bash -s -- install --dev
 ```
 
 برای نصب باینری Next-node روی هر سرور نود:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliking1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
 ```
 
 نصاب‌های باینری سرویس native systemd می‌سازند و asset مناسب معماری سرور را خودکار دانلود می‌کنند. Master دیتابیس‌های SQLite، MySQL و MariaDB را از طریق گزینه‌های نصب پشتیبانی می‌کند؛ نصاب نود فقط runtime نود را نصب می‌کند و اتصال آن به Master از طریق certificate/token داخل پنل انجام می‌شود.
@@ -158,7 +158,7 @@ curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash 
 پروژه را clone کنید و داشبورد و باینری‌های Go را بسازید.
 
 ```bash
-git clone https://github.com/aliyazdani1367/next.git
+git clone https://github.com/aliking1367/next.git
 cd Next
 cd dashboard
 npm ci
@@ -342,14 +342,14 @@ Body:
 # مشارکت در توسعه
 این ❤️‍🔥 تقدیم به همه‌ی کسانی که در توسعه رِبِکا مشارکت می‌کنند! اگر می‌خواهید مشارکت داشته باشید، لطفاً [دستورالعمل‌های مشارکت](CONTRIBUTING.md) را بررسی کنید و در صورت تمایل Pull Request ارسال کنید یا یک Issue باز کنید.
 
-لطفاً با بررسی [لیست کارها](https://github.com/aliyazdani1367/next/issues) به ما در بهبود رِبِکا کمک کنید. کمک‌های شما با آغوش باز پذیرفته می‌شود.
+لطفاً با بررسی [لیست کارها](https://github.com/aliking1367/next/issues) به ما در بهبود رِبِکا کمک کنید. کمک‌های شما با آغوش باز پذیرفته می‌شود.
 
 <p align="center">
 با تشکر از همه همکارانی که به بهبود رِبِکا کمک کردند:
 </p>
 <p align="center">
-<a href="https://github.com/aliyazdani1367/next/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=aliyazdani1367/next" />
+<a href="https://github.com/aliking1367/next/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=aliking1367/next" />
 </a>
 </p>
 <p align="center">

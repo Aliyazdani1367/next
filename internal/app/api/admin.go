@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	adminapp "github.com/aliyazdani1367/next/internal/app/admin"
-	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
-	webhookapp "github.com/aliyazdani1367/next/internal/app/webhook"
+	adminapp "github.com/aliking1367/next/internal/app/admin"
+	telegramapp "github.com/aliking1367/next/internal/app/telegram"
+	webhookapp "github.com/aliking1367/next/internal/app/webhook"
 )
 
 const (

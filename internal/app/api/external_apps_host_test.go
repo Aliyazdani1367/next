@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	externalapps "github.com/aliyazdani1367/next/internal/app/externalapps"
+	externalapps "github.com/aliking1367/next/internal/app/externalapps"
 )
 
 func TestExternalAppAwareHandlerServesOnlyMatchingSafeHost(t *testing.T) {

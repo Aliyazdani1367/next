@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aliyazdani1367/next/internal/app/nodeclient"
-	userread "github.com/aliyazdani1367/next/internal/app/user"
-	nodev1 "github.com/aliyazdani1367/next/internal/proto/node/v1"
+	"github.com/aliking1367/next/internal/app/nodeclient"
+	userread "github.com/aliking1367/next/internal/app/user"
+	nodev1 "github.com/aliking1367/next/internal/proto/node/v1"
 )
 
 func (c Controller) grpcApplyUserOperation(ctx context.Context, client *nodeclient.Client, node NodeRow, operation OperationRow, prepared *preparedRuntimeConfig) error {

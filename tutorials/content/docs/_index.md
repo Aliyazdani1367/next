@@ -19,8 +19,8 @@ Next panel to create, manage, and troubleshoot users, admins, and nodes. Main ar
 - My Account: API keys, password change, daily and per-node usage charts.
 - Open source—if it helps you, please star the GitHub repo.
 
-- [GitHub](https://github.com/aliyazdani1367/next)
-- [Telegram](https://t.me/aliyazdani1367)
+- [GitHub](https://github.com/aliking1367/next)
+- [Telegram](https://t.me/aliking1367)
 
 ## Start with a task
 

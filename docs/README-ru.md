@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/aliyazdani1367/next" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/aliking1367/next" target="_blank" rel="noopener noreferrer">
     <img width="160" height="160" src="../dashboard/src/assets/logo.svg" alt="Next logo">
   </a>
 </p>
@@ -13,19 +13,19 @@
 <br/>
 <p align="center">
     <a href="#">
-        <img src="https://img.shields.io/github/actions/workflow/status/aliyazdani1367/next/build.yml?style=flat-square" />
+        <img src="https://img.shields.io/github/actions/workflow/status/aliking1367/next/build.yml?style=flat-square" />
     </a>
-    <a href="https://hub.docker.com/r/aliyazdani1367/next" target="_blank">
-        <img src="https://img.shields.io/docker/pulls/aliyazdani1367/next?style=flat-square&logo=docker" />
+    <a href="https://hub.docker.com/r/aliking1367/next" target="_blank">
+        <img src="https://img.shields.io/docker/pulls/aliking1367/next?style=flat-square&logo=docker" />
     </a>
     <a href="#">
-        <img src="https://img.shields.io/github/license/aliyazdani1367/next?style=flat-square" />
+        <img src="https://img.shields.io/github/license/aliking1367/next?style=flat-square" />
     </a>
-    <a href="https://t.me/aliyazdani1367_next" target="_blank">
+    <a href="https://t.me/aliking1367_next" target="_blank">
         <img src="https://img.shields.io/badge/telegram-channel-blue?style=flat-square&logo=telegram" />
     </a>
     <a href="#">
-        <img src="https://img.shields.io/github/stars/aliyazdani1367/next?style=social" />
+        <img src="https://img.shields.io/github/stars/aliking1367/next?style=social" />
     </a>
 </p>
 
@@ -94,13 +94,13 @@ Next удобен в использовании, многофункционал�
 Установите Next master через бинарный установщик:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliking1367/next/master/scripts/next/next-binary.sh | sudo bash -s -- install
 ```
 
 Установите Next-node на каждом node-сервере через бинарный установщик node:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
+curl -sL https://raw.githubusercontent.com/aliking1367/next/master/scripts/next/next-node-binary.sh | sudo bash -s -- install
 ```
 
 Бинарные установщики создают native systemd-сервисы и автоматически скачивают подходящий Linux binary для архитектуры сервера. Master поддерживает SQLite, MySQL и MariaDB через параметры установки; node-установщик устанавливает только runtime ноды и подключается к Master через certificate/token flow из панели.
@@ -110,7 +110,7 @@ curl -sL https://raw.githubusercontent.com/aliyazdani1367/next/master/scripts/ne
 - Файлы Next будут размещены по адресу `/opt/next`.
 - Файл конфигурации будет размещен по адресу `/opt/next/.env` (см. [Конфигурация](#конфигурация)).
 - Файлы с данными будут размещены по адресу `/var/lib/next`.
-- По соображениям безопасности, панель управления Next недоступна через IP-адрес. Поэтому вам необходимо [получить SSL-сертификат](https://aliyazdani1367.github.io/next/ru/examples/issue-ssl-certificate) и получить доступ к панели управления Next, открыв веб-браузер и перейдя по адресу `https://YOUR_DOMAIN:8000/dashboard/` (замените YOUR_DOMAIN на ваш фактический домен).
+- По соображениям безопасности, панель управления Next недоступна через IP-адрес. Поэтому вам необходимо [получить SSL-сертификат](https://aliking1367.github.io/next/ru/examples/issue-ssl-certificate) и получить доступ к панели управления Next, открыв веб-браузер и перейдя по адресу `https://YOUR_DOMAIN:8000/dashboard/` (замените YOUR_DOMAIN на ваш фактический домен).
 - Вы также можете использовать перенаправление портов SSH для локального доступа к панели управления Next без домена. Замените `user@serverip` на ваше фактическое имя пользователя SSH и IP-адрес сервера и выполните следующую команду:
 
 ```bash
@@ -152,7 +152,7 @@ curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash 
 Клонируйте проект и соберите dashboard и Go-бинарники:
 
 ```bash
-git clone https://github.com/aliyazdani1367/next.git
+git clone https://github.com/aliking1367/next.git
 cd Next
 cd dashboard
 npm ci
@@ -359,16 +359,16 @@ Body:
 
 # Участники
 
-Мы ❤️‍🔥 участников проекта! Если вы хотите внести свой вклад, пожалуйста, ознакомьтесь с нашим [Contributing Guidelines](CONTRIBUTING.md) и не стесняйтесь отправлять запросы на исправление ошибок или сообщить о проблеме. Мы также приглашаем вас присоединиться к нашей группе [Telegram](https://t.me/aliyazdani1367_next) для получения поддержки.
+Мы ❤️‍🔥 участников проекта! Если вы хотите внести свой вклад, пожалуйста, ознакомьтесь с нашим [Contributing Guidelines](CONTRIBUTING.md) и не стесняйтесь отправлять запросы на исправление ошибок или сообщить о проблеме. Мы также приглашаем вас присоединиться к нашей группе [Telegram](https://t.me/aliking1367_next) для получения поддержки.
 
-Проверьте [open issues](https://github.com/aliyazdani1367/next/issues), чтобы помочь развитию этого проекта.
+Проверьте [open issues](https://github.com/aliking1367/next/issues), чтобы помочь развитию этого проекта.
 
 <p align="center">
 Спасибо всем участникам, благодаря которым Next становится лучше:
 </p>
 <p align="center">
-<a href="https://github.com/aliyazdani1367/next/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=aliyazdani1367/next" />
+<a href="https://github.com/aliking1367/next/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=aliking1367/next" />
 </a>
 </p>
 <p align="center">

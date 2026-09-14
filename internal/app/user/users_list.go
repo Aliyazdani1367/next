@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyazdani1367/next/internal/app/online"
-	"github.com/aliyazdani1367/next/internal/app/searchmatch"
+	"github.com/aliking1367/next/internal/app/online"
+	"github.com/aliking1367/next/internal/app/searchmatch"
 )
 
 const (

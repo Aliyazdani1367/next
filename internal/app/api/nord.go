@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	nordvpnapp "github.com/aliyazdani1367/next/internal/app/nordvpn"
+	nordvpnapp "github.com/aliking1367/next/internal/app/nordvpn"
 )
 
 func (s *Server) handleNordPath(w http.ResponseWriter, r *http.Request) {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	nodeapp "github.com/aliyazdani1367/next/internal/app/node"
-	telegramapp "github.com/aliyazdani1367/next/internal/app/telegram"
+	nodeapp "github.com/aliking1367/next/internal/app/node"
+	telegramapp "github.com/aliking1367/next/internal/app/telegram"
 )
 
 func (s *Server) handleNodeRoot(w http.ResponseWriter, r *http.Request) {

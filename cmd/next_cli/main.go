@@ -22,9 +22,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	admincore "github.com/aliyazdani1367/next/internal/app/admin"
-	"github.com/aliyazdani1367/next/internal/app/migrations"
-	"github.com/aliyazdani1367/next/internal/platform/db"
+	admincore "github.com/aliking1367/next/internal/app/admin"
+	"github.com/aliking1367/next/internal/app/migrations"
+	"github.com/aliking1367/next/internal/platform/db"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/term"

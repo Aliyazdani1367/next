@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package next.node.v1;
 
-option go_package = "github.com/aliyazdani1367/next/internal/proto/node/v1;nodev1";
+option go_package = "github.com/aliking1367/next/internal/proto/node/v1;nodev1";
 
 service NodeControlService {
   rpc Hello(HelloRequest) returns (HelloResponse);

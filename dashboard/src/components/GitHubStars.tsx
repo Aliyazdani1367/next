@@ -6,7 +6,7 @@ export const GitHubStars: FC = () => {
 	const [stars, setStars] = useState<number | null>(null);
 
 	useEffect(() => {
-		fetch("https://api.github.com/repos/aliyazdani1367/next")
+		fetch("https://api.github.com/repos/aliking1367/next")
 			.then((res) => res.json())
 			.then((data) => {
 				if (data.stargazers_count) {
@@ -20,7 +20,7 @@ export const GitHubStars: FC = () => {
 
 	const handleClick = () => {
 		window.open(
-			"https://github.com/aliyazdani1367/next",
+			"https://github.com/aliking1367/next",
 			"_blank",
 			"noopener,noreferrer",
 		);

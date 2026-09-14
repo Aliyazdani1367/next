@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	platformdb "github.com/aliyazdani1367/next/internal/platform/db"
+	platformdb "github.com/aliking1367/next/internal/platform/db"
 
 	_ "github.com/mattn/go-sqlite3"
 	_ "modernc.org/sqlite"

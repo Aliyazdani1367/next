@@ -4,9 +4,9 @@ plugins:
     out: .
     opt:
       - paths=import
-      - module=github.com/aliyazdani1367/next
+      - module=github.com/aliking1367/next
   - local: protoc-gen-go-grpc
     out: .
     opt:
       - paths=import
-      - module=github.com/aliyazdani1367/next
+      - module=github.com/aliking1367/next

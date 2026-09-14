@@ -1,4 +1,4 @@
-module github.com/aliyazdani1367/next
+module github.com/aliking1367/next
 
 go 1.25.0
 
