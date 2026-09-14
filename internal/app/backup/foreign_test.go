@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -252,5 +253,107 @@ func TestExtractForeignUsersRejectsUnknownFormat(t *testing.T) {
 
 	if _, err := InspectForeignArchive(archivePath); err == nil {
 		t.Fatal("expected an error for an unsupported payload type")
+	}
+}
+
+// --- bare Marzban/PasarGuard-family database files (no Next wrapper) -------
+
+func TestInspectBareMarzbanStyleSQLiteFile(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "marzban_db.sqlite3")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mirrors Marzban's actual admins/users columns (no service_id, telegram_id,
+	// contact_number, ip_limit, or credential_key on users; on_hold_timeout is
+	// a real DATETIME the way Marzban itself stores it, not a Unix integer).
+	if _, err := db.Exec(`CREATE TABLE admins (
+		id INTEGER PRIMARY KEY, username TEXT, hashed_password TEXT,
+		is_sudo BOOLEAN, telegram_id BIGINT, users_usage BIGINT
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY, username TEXT, status TEXT, used_traffic BIGINT,
+		data_limit BIGINT, data_limit_reset_strategy TEXT, expire INTEGER,
+		admin_id INTEGER, note TEXT, on_hold_expire_duration BIGINT,
+		on_hold_timeout DATETIME, auto_delete_in_days INTEGER
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO admins (id, username, is_sudo) VALUES (1, 'reseller1', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (username, status, data_limit, expire, admin_id, on_hold_timeout) VALUES
+		('marzuser1', 'active', 5368709120, 1999999999, 1, NULL),
+		('marzuser2', 'on_hold', NULL, NULL, 1, '2026-01-15 10:30:00.123456')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Uploaded exactly as Marzban would export it: a bare .sqlite3 file with no
+	// Next manifest wrapper at all.
+	admins, err := InspectForeignArchive(dbPath)
+	if err != nil {
+		t.Fatalf("InspectForeignArchive on a bare Marzban sqlite file: %v", err)
+	}
+	if len(admins) != 1 || admins[0].Username != "reseller1" || admins[0].UserCount != 2 {
+		t.Fatalf("admins = %+v", admins)
+	}
+
+	users, err := ExtractForeignUsers(dbPath, "reseller1")
+	if err != nil {
+		t.Fatalf("ExtractForeignUsers: %v", err)
+	}
+	byName := map[string]ForeignUser{}
+	for _, u := range users {
+		byName[u.Username] = u
+	}
+	u1, ok := byName["marzuser1"]
+	if !ok || u1.DataLimit == nil || *u1.DataLimit != 5368709120 || u1.Expire == nil || *u1.Expire != 1999999999 {
+		t.Fatalf("marzuser1 = %+v", u1)
+	}
+	u2, ok := byName["marzuser2"]
+	if !ok || u2.Status != "on_hold" {
+		t.Fatalf("marzuser2 = %+v", u2)
+	}
+	if u2.OnHoldTimeout == nil {
+		t.Fatal("expected on_hold_timeout parsed from a DATETIME string into a Unix timestamp")
+	}
+	wantUnix := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC).Unix()
+	if *u2.OnHoldTimeout != wantUnix {
+		t.Fatalf("on_hold_timeout = %d, want %d", *u2.OnHoldTimeout, wantUnix)
+	}
+}
+
+func TestInspectBareMySQLDumpFile(t *testing.T) {
+	dump := "-- MySQL dump 10.13\n" +
+		"INSERT INTO `admins` (`id`, `username`, `is_sudo`) VALUES (1,'reseller1',0);\n" +
+		"INSERT INTO `users` (`username`,`status`,`data_limit`,`admin_id`) VALUES ('u1','active',1000,1);\n"
+	path := filepath.Join(t.TempDir(), "marzban_dump.sql")
+	if err := os.WriteFile(path, []byte(dump), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	admins, err := InspectForeignArchive(path)
+	if err != nil {
+		t.Fatalf("InspectForeignArchive on a bare mysqldump file: %v", err)
+	}
+	if len(admins) != 1 || admins[0].Username != "reseller1" || admins[0].UserCount != 1 {
+		t.Fatalf("admins = %+v", admins)
+	}
+}
+
+func TestDetectBareForeignDatabaseLeavesGzipToTheNormalPath(t *testing.T) {
+	// A real Next .rbbackup (gzip'd tar) must still go through the normal
+	// manifest-based path, not be misdetected as a bare file.
+	archivePath := buildTestArchive(t, baseManifest(), map[string]string{
+		DatabaseDumpName: `{"format":"next-backup","version":1,"tables":[]}`,
+	})
+	_, ok, err := detectBareForeignDatabase(archivePath)
+	if ok || err != nil {
+		t.Fatalf("expected a real .rbbackup to be left to the normal path, got ok=%v err=%v", ok, err)
 	}
 }

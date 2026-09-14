@@ -2300,7 +2300,7 @@
 	"myaccount.perNodeUsage": "Per-node usage",
 	"myaccount.importUsers.tabLabel": "Import users",
 	"myaccount.importUsers.title": "Import users from another panel",
-	"myaccount.importUsers.description": "Upload a backup file from a different Next/Rebecca panel to bring your own users over into your account here.",
+	"myaccount.importUsers.description": "Upload a backup or database file from a different Next/Rebecca, Marzban, or PasarGuard panel to bring your own users over into your account here.",
 	"myaccount.importUsers.file": "Backup file",
 	"myaccount.importUsers.dropTitle": "Drop the other panel's backup here",
 	"myaccount.importUsers.dropHint": "Drag a .rbbackup file here or select it from your device.",

@@ -2286,7 +2286,7 @@
 	"myaccount.perNodeUsage": "مصرف به ازای نود",
 	"myaccount.importUsers.tabLabel": "وارد کردن کاربر",
 	"myaccount.importUsers.title": "وارد کردن کاربر از پنل دیگر",
-	"myaccount.importUsers.description": "یک فایل بکاپ از یک پنل Next/Rebecca دیگر آپلود کنید تا کاربرهای خودتان را زیر همین حساب اینجا وارد کنید.",
+	"myaccount.importUsers.description": "یک فایل بکاپ یا دیتابیس از یک پنل Next/Rebecca، Marzban یا PasarGuard دیگر آپلود کنید تا کاربرهای خودتان را زیر همین حساب اینجا وارد کنید.",
 	"myaccount.importUsers.file": "فایل بکاپ",
 	"myaccount.importUsers.dropTitle": "فایل بکاپ پنل دیگر را اینجا رها کنید",
 	"myaccount.importUsers.dropHint": "یک فایل .rbbackup را بکشید و اینجا رها کنید یا از دستگاه خود انتخاب کنید.",

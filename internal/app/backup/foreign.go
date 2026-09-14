@@ -1,15 +1,18 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ForeignAdmin summarizes one admin found in a foreign backup archive's users
@@ -132,10 +135,19 @@ func ExtractForeignUsers(archivePath string, sourceAdminUsername string) ([]Fore
 }
 
 // openForeignDatabase extracts the archive to a scratch directory and returns
-// a read-only view matching the payload type recorded in its manifest.
+// a read-only view matching the payload type recorded in its manifest. A file
+// that isn't wrapped in Next's own tar/manifest format at all — a bare
+// SQLite database file, or a plain MySQL/MariaDB dump — is also accepted
+// directly, since Next descends from Marzban (and shares its core
+// admins/users columns with Marzban forks like PasarGuard); this lets an
+// admin migrate straight from those panels' own database exports without
+// them ever going through Next's export format.
 func openForeignDatabase(archivePath string) (foreignDatabase, error) {
 	if stat, err := os.Stat(archivePath); err != nil || stat.IsDir() {
 		return nil, Error{Message: "Backup file not found"}
+	}
+	if bare, ok, err := detectBareForeignDatabase(archivePath); ok || err != nil {
+		return bare, err
 	}
 	extractDir, err := os.MkdirTemp("", "next-foreign-backup-*")
 	if err != nil {
@@ -190,6 +202,37 @@ func openForeignDatabase(archivePath string) (foreignDatabase, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+var sqliteFileMagic = []byte("SQLite format 3\x00")
+
+// detectBareForeignDatabase sniffs the first bytes of the uploaded file to
+// tell a Next-format archive (gzip) apart from a bare SQLite file or a plain
+// text SQL dump uploaded directly from another panel. ok is false (with a nil
+// error) when the file looks like a gzip stream and should go through the
+// normal tar/manifest path instead.
+func detectBareForeignDatabase(path string) (foreignDatabase, bool, error) {
+	header := make([]byte, 16)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	n, readErr := io.ReadFull(f, header)
+	_ = f.Close()
+	if readErr != nil && readErr != io.ErrUnexpectedEOF {
+		return nil, false, nil
+	}
+	header = header[:n]
+
+	if len(header) >= 2 && header[0] == 0x1f && header[1] == 0x8b {
+		return nil, false, nil // gzip: Next's own wrapped .rbbackup format
+	}
+	if bytes.HasPrefix(header, sqliteFileMagic) {
+		db, err := openForeignSQLite(path)
+		return db, true, err
+	}
+	db, err := parseForeignMySQLDump(path)
+	return db, true, err
 }
 
 type cleanupWrappedDB struct {
@@ -297,12 +340,12 @@ func buildForeignUserRow(v map[string]any) foreignUserRow {
 			Username:               asString(v["username"]),
 			Status:                 asString(v["status"]),
 			DataLimit:              asOptionalInt64(v["data_limit"]),
-			Expire:                 asOptionalInt64(v["expire"]),
+			Expire:                 asOptionalUnixTime(v["expire"]),
 			Note:                   asString(v["note"]),
 			TelegramID:             asOptionalInt64(v["telegram_id"]),
 			ContactNumber:          asString(v["contact_number"]),
 			OnHoldExpireDuration:   asOptionalInt64(v["on_hold_expire_duration"]),
-			OnHoldTimeout:          asOptionalInt64(v["on_hold_timeout"]),
+			OnHoldTimeout:          asOptionalUnixTime(v["on_hold_timeout"]),
 			IPLimit:                asOptionalInt64(v["ip_limit"]),
 			AutoDeleteInDays:       asOptionalInt64(v["auto_delete_in_days"]),
 			DataLimitResetStrategy: asString(v["data_limit_reset_strategy"]),
@@ -699,4 +742,43 @@ func asOptionalInt64Err(v any) (int64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// asOptionalUnixTime reads a timestamp field that may be stored either as a
+// Unix integer (Marzban's and Next's own "expire"/"on_hold_timeout" columns)
+// or as an actual DATETIME value (PasarGuard's), returning it as a Unix
+// timestamp either way.
+func asOptionalUnixTime(v any) *int64 {
+	if n, ok := asOptionalInt64Err(v); ok {
+		return &n
+	}
+	var text string
+	switch t := v.(type) {
+	case time.Time:
+		unix := t.Unix()
+		return &unix
+	case []byte:
+		text = string(t)
+	case string:
+		text = t
+	default:
+		return nil
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	} {
+		if parsed, err := time.Parse(layout, text); err == nil {
+			unix := parsed.Unix()
+			return &unix
+		}
+	}
+	return nil
 }
