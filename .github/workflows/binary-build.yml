@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: ${{ env.DASH_DIR }}/package-lock.json
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: Set up Go
         if: matrix.asset_arch == 'amd64' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.full_matrix == true)
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
 
@@ -172,7 +172,7 @@ jobs:
           path: dashboard/build
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
 
