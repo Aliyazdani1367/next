@@ -141,7 +141,7 @@ export const UserMigrationPanel = () => {
 							{t("myaccount.importUsers.file")}
 						</FormLabel>
 						<FileDropzone
-							accept=".rbbackup,.sqlite3,.sqlite,.db,.sql,application/vnd.next.backup,application/gzip"
+							accept=".rbbackup,.sqlite3,.sqlite,.db,.sql"
 							isDisabled={inspectMutation.isLoading}
 							selectedFile={selectedFile}
 							title={t("myaccount.importUsers.dropTitle")}

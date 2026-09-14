@@ -468,26 +468,52 @@ func (f *foreignMySQLDB) users(context.Context, map[string]int64) ([]foreignUser
 }
 
 // extractMySQLInsertRows scans a mysqldump text file for every
-// "INSERT INTO `table` (cols) VALUES (...), (...), ...;" statement addressing
-// the given table and returns the declared column list plus every value
-// tuple, without ever executing any SQL from the dump.
+// "INSERT INTO `table` ... VALUES (...), (...), ...;" statement addressing
+// the given table and returns the column list plus every value tuple,
+// without ever executing any SQL from the dump. mysqldump's default output
+// omits the column list entirely ("INSERT INTO `admins` VALUES (...)") —
+// only "--complete-insert" dumps include one — so when no column list is
+// present, the columns are taken from the table's own CREATE TABLE
+// definition instead, in the same order mysqldump always writes them.
 func extractMySQLInsertRows(text string, table string) ([]string, [][]any, error) {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?is)INSERT\s+INTO\s+`+"`?%s`?"+`\s*\(([^)]*)\)\s*VALUES\s*`, regexp.QuoteMeta(table)))
+	headerPattern := regexp.MustCompile(`(?is)INSERT\s+INTO\s+` + mysqlIdentifierPattern(table))
+	createColumns, _ := extractCreateTableColumns(text, table)
+
 	var columns []string
 	var rows [][]any
 	searchFrom := 0
 	for {
-		loc := pattern.FindStringSubmatchIndex(text[searchFrom:])
+		loc := headerPattern.FindStringIndex(text[searchFrom:])
 		if loc == nil {
 			break
 		}
-		colStart, colEnd := searchFrom+loc[2], searchFrom+loc[3]
-		valuesStart := searchFrom + loc[1]
-		cols := splitMySQLIdentifierList(text[colStart:colEnd])
-		if columns == nil {
-			columns = cols
+		pos := searchFrom + loc[1]
+		pos = skipSQLSpace(text, pos)
+
+		var cols []string
+		if pos < len(text) && text[pos] == '(' {
+			inner, next, err := scanBalancedParens(text, pos)
+			if err != nil {
+				return nil, nil, Error{Message: "Could not parse backup's INSERT statement"}
+			}
+			cols = splitMySQLIdentifierList(inner)
+			pos = skipSQLSpace(text, next)
+		} else {
+			cols = createColumns
 		}
-		tuples, consumed, err := splitMySQLValueTuples(text[valuesStart:])
+
+		if !hasCaseInsensitivePrefix(text[pos:], "VALUES") {
+			// Not actually this table's INSERT (e.g. only matched a comment);
+			// resume scanning right after the INSERT INTO keyword match.
+			searchFrom = searchFrom + loc[1]
+			continue
+		}
+		pos += len("VALUES")
+		if cols == nil {
+			return nil, nil, Error{Message: "This backup's " + table + " table could not be parsed: no column list and no CREATE TABLE definition found"}
+		}
+
+		tuples, consumed, err := splitMySQLValueTuples(text[pos:])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -501,9 +527,156 @@ func extractMySQLInsertRows(text string, table string) ([]string, [][]any, error
 			}
 			rows = append(rows, values)
 		}
-		searchFrom = valuesStart + consumed
+		if columns == nil {
+			columns = cols
+		}
+		searchFrom = pos + consumed
 	}
 	return columns, rows, nil
+}
+
+// extractCreateTableColumns parses "CREATE TABLE `table` ( col defs..., KEY
+// ..., CONSTRAINT ... )" and returns the column names in declaration order,
+// skipping key/index/constraint entries.
+func extractCreateTableColumns(text string, table string) ([]string, bool) {
+	pattern := regexp.MustCompile(`(?is)CREATE\s+TABLE\s+` + mysqlIdentifierPattern(table))
+	loc := pattern.FindStringIndex(text)
+	if loc == nil {
+		return nil, false
+	}
+	pos := skipSQLSpace(text, loc[1])
+	if pos >= len(text) || text[pos] != '(' {
+		return nil, false
+	}
+	inner, _, err := scanBalancedParens(text, pos)
+	if err != nil {
+		return nil, false
+	}
+
+	var columns []string
+	for _, entry := range splitTopLevelSQLList(inner) {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		upper := strings.ToUpper(entry)
+		isConstraint := false
+		for _, prefix := range []string{
+			"PRIMARY KEY", "KEY ", "UNIQUE KEY", "UNIQUE (", "UNIQUE\t", "CONSTRAINT",
+			"FOREIGN KEY", "INDEX ", "INDEX(", "FULLTEXT", "SPATIAL", "CHECK ", "CHECK(",
+		} {
+			if strings.HasPrefix(upper, prefix) {
+				isConstraint = true
+				break
+			}
+		}
+		if isConstraint {
+			continue
+		}
+		if strings.HasPrefix(entry, "`") {
+			if end := strings.Index(entry[1:], "`"); end >= 0 {
+				columns = append(columns, entry[1:1+end])
+				continue
+			}
+		}
+		if fields := strings.Fields(entry); len(fields) > 0 {
+			columns = append(columns, strings.Trim(fields[0], "`"))
+		}
+	}
+	if len(columns) == 0 {
+		return nil, false
+	}
+	return columns, true
+}
+
+// mysqlIdentifierPattern matches an optionally backtick-quoted SQL identifier
+// exactly (not as a substring of a longer identifier), so a table named
+// "admins" never matches "admins_services" or "admin_sessions".
+func mysqlIdentifierPattern(name string) string {
+	quoted := regexp.QuoteMeta(name)
+	return "(?:`" + quoted + "`|\\b" + quoted + "\\b)"
+}
+
+func skipSQLSpace(s string, pos int) int {
+	for pos < len(s) {
+		switch s[pos] {
+		case ' ', '\t', '\n', '\r':
+			pos++
+		default:
+			return pos
+		}
+	}
+	return pos
+}
+
+func hasCaseInsensitivePrefix(s string, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
+}
+
+// scanBalancedParens returns the content between the matching '(' at s[open]
+// (which must be '(') and its closing ')', respecting nested parens and
+// quoted/backtick-quoted strings, plus the index just after the closing ')'.
+func scanBalancedParens(s string, open int) (inner string, end int, err error) {
+	if open >= len(s) || s[open] != '(' {
+		return "", open, fmt.Errorf("expected '(' at position %d", open)
+	}
+	depth := 1
+	i := open + 1
+	contentStart := i
+	var inString byte
+	for i < len(s) && depth > 0 {
+		c := s[i]
+		switch {
+		case inString != 0:
+			if c == '\\' && inString != '`' {
+				i++
+			} else if c == inString {
+				inString = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			inString = c
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+		}
+		i++
+	}
+	if depth != 0 {
+		return "", i, fmt.Errorf("unterminated parentheses")
+	}
+	return s[contentStart : i-1], i, nil
+}
+
+// splitTopLevelSQLList splits s on commas that are not nested inside parens
+// or quoted/backtick-quoted strings.
+func splitTopLevelSQLList(s string) []string {
+	var parts []string
+	depth := 0
+	var inString byte
+	last := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inString != 0:
+			if c == '\\' && inString != '`' {
+				i++
+			} else if c == inString {
+				inString = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			inString = c
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+		case c == ',' && depth == 0:
+			parts = append(parts, s[last:i])
+			last = i + 1
+		}
+	}
+	parts = append(parts, s[last:])
+	return parts
 }
 
 func splitMySQLIdentifierList(raw string) []string {

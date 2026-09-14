@@ -357,3 +357,92 @@ func TestDetectBareForeignDatabaseLeavesGzipToTheNormalPath(t *testing.T) {
 		t.Fatalf("expected a real .rbbackup to be left to the normal path, got ok=%v err=%v", ok, err)
 	}
 }
+
+// TestExtractMySQLInsertRowsHandlesRealMysqldumpFormat guards against a real
+// regression: mysqldump's DEFAULT output (no --complete-insert) omits the
+// column list entirely, e.g. "INSERT INTO `admins` VALUES (1,'admin',...);" —
+// columns must then come from the table's own CREATE TABLE definition, in
+// declaration order, skipping KEY/CONSTRAINT/PRIMARY KEY entries.
+func TestExtractMySQLInsertRowsHandlesRealMysqldumpFormat(t *testing.T) {
+	dump := "" +
+		"DROP TABLE IF EXISTS `admins`;\n" +
+		"CREATE TABLE `admins` (\n" +
+		"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+		"  `username` varchar(34) NOT NULL,\n" +
+		"  `hashed_password` varchar(128) DEFAULT NULL,\n" +
+		"  `role` enum('full_access','sudo','standard') NOT NULL,\n" +
+		"  PRIMARY KEY (`id`),\n" +
+		"  KEY `ix_admins_username` (`username`)\n" +
+		") ENGINE=InnoDB;\n" +
+		"LOCK TABLES `admins` WRITE;\n" +
+		"INSERT INTO `admins` VALUES (1,'admin','$2a$12$hash','full_access'),(2,'ali2','$2a$12$hash2','sudo');\n" +
+		"UNLOCK TABLES;\n" +
+		"DROP TABLE IF EXISTS `admins_services`;\n" +
+		"CREATE TABLE `admins_services` (\n" +
+		"  `admin_id` int NOT NULL,\n" +
+		"  `service_id` int NOT NULL\n" +
+		") ENGINE=InnoDB;\n" +
+		"INSERT INTO `admins_services` VALUES (1,5);\n" +
+		"DROP TABLE IF EXISTS `users`;\n" +
+		"CREATE TABLE `users` (\n" +
+		"  `id` int NOT NULL AUTO_INCREMENT,\n" +
+		"  `username` varchar(128) NOT NULL,\n" +
+		"  `credential_key` varchar(64) DEFAULT NULL,\n" +
+		"  `status` enum('active','on_hold','deleted') NOT NULL,\n" +
+		"  `data_limit` bigint DEFAULT NULL,\n" +
+		"  `admin_id` int DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`),\n" +
+		"  CONSTRAINT `users_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`)\n" +
+		") ENGINE=InnoDB;\n" +
+		"INSERT INTO `users` VALUES (1,'5XRoer','dd9c66d0','deleted',NULL,1),(2,'alice','abc123','active',1000,1);\n"
+
+	adminCols, adminRows, err := extractMySQLInsertRows(dump, "admins")
+	if err != nil {
+		t.Fatalf("extractMySQLInsertRows(admins): %v", err)
+	}
+	wantAdminCols := []string{"id", "username", "hashed_password", "role"}
+	if !reflect.DeepEqual(adminCols, wantAdminCols) {
+		t.Fatalf("admin columns = %v, want %v (columns must come from CREATE TABLE, not be missing entirely)", adminCols, wantAdminCols)
+	}
+	if len(adminRows) != 2 {
+		t.Fatalf("expected 2 admin rows, got %d", len(adminRows))
+	}
+	first := zip(adminCols, adminRows[0])
+	if first["username"] != "admin" {
+		t.Fatalf("admin row 0 = %+v", first)
+	}
+
+	userCols, userRows, err := extractMySQLInsertRows(dump, "users")
+	if err != nil {
+		t.Fatalf("extractMySQLInsertRows(users): %v", err)
+	}
+	if len(userRows) != 2 {
+		t.Fatalf("expected 2 user rows, got %d: cols=%v", len(userRows), userCols)
+	}
+	second := zip(userCols, userRows[1])
+	if second["username"] != "alice" || second["data_limit"] != "1000" {
+		t.Fatalf("user row 1 = %+v", second)
+	}
+}
+
+func TestInspectRealMarzbanStyleHeaderlessMySQLDump(t *testing.T) {
+	dump := "" +
+		"CREATE TABLE `admins` (`id` int NOT NULL AUTO_INCREMENT, `username` varchar(34) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;\n" +
+		"INSERT INTO `admins` VALUES (1,'reseller1'),(2,'reseller2');\n" +
+		"CREATE TABLE `users` (`id` int NOT NULL AUTO_INCREMENT, `username` varchar(128) NOT NULL, `status` varchar(20) NOT NULL, `admin_id` int DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;\n" +
+		"INSERT INTO `users` VALUES (1,'u1','active',1),(2,'u2','active',1),(3,'u3','active',2);\n"
+	path := filepath.Join(t.TempDir(), "headerless.sql")
+	if err := os.WriteFile(path, []byte(dump), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	admins, err := InspectForeignArchive(path)
+	if err != nil {
+		t.Fatalf("InspectForeignArchive: %v", err)
+	}
+	sortAdmins(admins)
+	want := []ForeignAdmin{{Username: "reseller1", UserCount: 2}, {Username: "reseller2", UserCount: 1}}
+	if !reflect.DeepEqual(admins, want) {
+		t.Fatalf("admins = %+v, want %+v", admins, want)
+	}
+}

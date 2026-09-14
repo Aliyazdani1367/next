@@ -240,7 +240,7 @@ export const DashboardBackupControls = ({
 							<FormControl isRequired>
 								<FormLabel fontSize="13px" fontWeight="600" color="panel.textSecondary">{t("dashboard.backup.file")}</FormLabel>
 								<FileDropzone
-									accept=".rbbackup,application/vnd.next.backup,application/gzip"
+									accept=".rbbackup"
 									isDisabled={
 										!backupActionsAvailable || importMutation.isLoading
 									}

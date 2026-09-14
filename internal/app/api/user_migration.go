@@ -160,6 +160,10 @@ func (s *Server) handleUserMigrationImport(w http.ResponseWriter, r *http.Reques
 	skipped := []userMigrationSkip{}
 	imported := 0
 	for _, foreignUser := range foreignUsers {
+		if strings.EqualFold(strings.TrimSpace(foreignUser.Status), "deleted") {
+			skipped = append(skipped, userMigrationSkip{Username: foreignUser.Username, Reason: "deleted on the source panel"})
+			continue
+		}
 		raw, buildErr := buildUserMigrationPayload(foreignUser, payload.ServiceID)
 		if buildErr != nil {
 			skipped = append(skipped, userMigrationSkip{Username: foreignUser.Username, Reason: buildErr.Error()})
