@@ -1,6 +1,9 @@
 package bot
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Callback data prefixes for the user detail inline keyboard. They mirror the
 // legacy Python callbacks (delete/suspend/activate/reset_usage/revoke_sub/...).
@@ -14,7 +17,46 @@ const (
 	cbLinks      = "links:"
 	cbEditNote   = "edit_note:"
 	cbRefresh    = "refresh:"
+
+	cbBackupSetSchedule = "backup_set:"
+	cbBackupSendNow     = "backup_send"
+	cbRestoreConfirm    = "restore_confirm"
+	cbRestoreCancel     = "restore_cancel"
 )
+
+// backupSchedulePresets are the interval choices offered on the /backup menu.
+// Keeping this to fixed presets (rather than free-text chat input) avoids
+// parsing/validating arbitrary admin-typed intervals for a scheduler that
+// pushes the entire panel database.
+var backupSchedulePresets = []struct {
+	Label string
+	Value int
+	Unit  string
+}{
+	{"Every 6 hours", 6, "hours"},
+	{"Every 12 hours", 12, "hours"},
+	{"Every 24 hours", 24, "hours"},
+	{"Every 3 days", 3, "days"},
+	{"Every 7 days", 7, "days"},
+}
+
+func backupMenuKeyboard() *InlineKeyboard {
+	rows := make([][]InlineButton, 0, len(backupSchedulePresets)+1)
+	for _, preset := range backupSchedulePresets {
+		rows = append(rows, []InlineButton{{
+			Text:         preset.Label,
+			CallbackData: fmt.Sprintf("%s%d:%s", cbBackupSetSchedule, preset.Value, preset.Unit),
+		}})
+	}
+	rows = append(rows, []InlineButton{{Text: "📤 Send backup now", CallbackData: cbBackupSendNow}})
+	return &InlineKeyboard{InlineKeyboard: rows}
+}
+
+func restoreConfirmKeyboard() *InlineKeyboard {
+	return &InlineKeyboard{InlineKeyboard: [][]InlineButton{
+		{{Text: "✅ Confirm restore", CallbackData: cbRestoreConfirm}, {Text: "✖️ Cancel", CallbackData: cbRestoreCancel}},
+	}}
+}
 
 func mainMenuKeyboard() *InlineKeyboard {
 	return &InlineKeyboard{InlineKeyboard: [][]InlineButton{

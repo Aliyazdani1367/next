@@ -12,11 +12,16 @@ const helpText = `🤖 <b>Next admin bot</b>
 /user <code>&lt;username&gt;</code> — show a user and manage it
 /usage <code>&lt;username&gt;</code> — show a user's usage
 /system — show system status
+/backup — view/change the backup schedule, or send a backup file here to restore it
 /help — show this help`
 
 func (b *Bot) handleMessage(ctx context.Context, settings Settings, msg *Message) {
 	chatID := msg.Chat.ID
 	if !authorized(settings, chatID) {
+		return
+	}
+	if msg.Document != nil {
+		b.handleBackupDocument(ctx, settings, chatID, msg.Document)
 		return
 	}
 	text := strings.TrimSpace(msg.Text)
@@ -39,6 +44,8 @@ func (b *Bot) handleMessage(ctx context.Context, settings Settings, msg *Message
 		b.handleUsageCommand(ctx, settings, chatID, arg)
 	case "/user":
 		b.handleUserCommand(ctx, settings, chatID, arg)
+	case "/backup":
+		b.handleBackupCommand(ctx, settings, chatID)
 	default:
 		if command != "" {
 			b.reply(ctx, settings, chatID, "Unknown command. Send /help.", nil)
@@ -117,10 +124,24 @@ func (b *Bot) handleCallback(ctx context.Context, settings Settings, query *Call
 		return
 	}
 
+	switch query.Data {
+	case cbBackupSendNow:
+		b.handleBackupSendNow(ctx, settings, query, chatID, messageID)
+		return
+	case cbRestoreConfirm:
+		b.handleRestoreCallback(ctx, settings, query, chatID, messageID, true)
+		return
+	case cbRestoreCancel:
+		b.handleRestoreCallback(ctx, settings, query, chatID, messageID, false)
+		return
+	}
+
 	switch prefix {
 	case cbRefresh:
 		_ = b.client.answerCallbackQuery(ctx, settings, query.ID, "")
 		b.sendRefreshedUser(ctx, settings, chatID, messageID, value, "")
+	case cbBackupSetSchedule:
+		b.handleBackupSetSchedule(ctx, settings, query, chatID, messageID, value)
 	case cbLinks:
 		b.handleLinks(ctx, settings, query, chatID, value)
 	case cbEditNote:

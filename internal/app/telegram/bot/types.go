@@ -15,10 +15,20 @@ type Update struct {
 }
 
 type Message struct {
-	MessageID int64  `json:"message_id"`
-	From      *User  `json:"from"`
-	Chat      Chat   `json:"chat"`
-	Text      string `json:"text"`
+	MessageID int64     `json:"message_id"`
+	From      *User     `json:"from"`
+	Chat      Chat      `json:"chat"`
+	Text      string    `json:"text"`
+	Caption   string    `json:"caption"`
+	Document  *Document `json:"document"`
+}
+
+// Document mirrors the subset of a Telegram document attachment the bot needs
+// to stage a restore upload.
+type Document struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name"`
+	FileSize int64  `json:"file_size"`
 }
 
 type CallbackQuery struct {
@@ -115,4 +125,40 @@ type SystemInfo struct {
 // SystemService exposes read-only system information for the bot.
 type SystemService interface {
 	Info(ctx context.Context) (SystemInfo, error)
+}
+
+// BackupStatus is the data the bot renders for the /backup command.
+type BackupStatus struct {
+	Enabled       bool
+	Scope         string
+	IntervalValue int
+	IntervalUnit  string
+	LastSentAt    *string
+	LastError     *string
+}
+
+// BackupSendResult is the outcome of an on-demand backup delivery.
+type BackupSendResult struct {
+	Filename string
+	Size     int64
+}
+
+// BackupRestoreResult is the outcome of restoring an uploaded backup archive.
+type BackupRestoreResult struct {
+	TablesRestored   int
+	RowsRestored     int
+	FilesRestored    []string
+	Warnings         []string
+	SafetyBackupPath string
+}
+
+// BackupService exposes the backup operations the bot needs: reading/changing
+// the periodic-backup schedule, sending an on-demand backup, and restoring an
+// uploaded archive. Implementations must enforce the same runtime/permission
+// checks as the HTTP API (e.g. binary-install-only).
+type BackupService interface {
+	Status(ctx context.Context) (BackupStatus, error)
+	SetSchedule(ctx context.Context, value int, unit string) error
+	SendNow(ctx context.Context) (BackupSendResult, error)
+	Restore(ctx context.Context, archivePath string) (BackupRestoreResult, error)
 }

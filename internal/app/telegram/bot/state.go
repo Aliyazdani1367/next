@@ -9,7 +9,8 @@ import (
 
 // Conversation states for multi-step flows.
 const (
-	stateAwaitNote = "await_note"
+	stateAwaitNote           = "await_note"
+	stateAwaitRestoreConfirm = "await_restore_confirm"
 )
 
 // stateStore persists per-chat conversation state so multi-step flows (e.g.

@@ -90,6 +90,66 @@ func (c client) editMessageText(ctx context.Context, settings Settings, chatID i
 	return c.fireAndForget(ctx, settings, "editMessageText", payload)
 }
 
+// maxTelegramDownloadBytes is the Telegram Bot API's hard limit for files a bot
+// can download via getFile/the file endpoint (cloud Bot API, not a local server).
+const maxTelegramDownloadBytes int64 = 20 << 20
+
+type fileInfo struct {
+	FilePath string
+	FileSize int64
+}
+
+// getFile resolves a file_id to a downloadable file_path.
+func (c client) getFile(ctx context.Context, settings Settings, fileID string) (fileInfo, error) {
+	httpClient, err := httpClientFor(settings.ProxyURL, 30*time.Second)
+	if err != nil {
+		return fileInfo{}, err
+	}
+	raw, err := c.call(ctx, httpClient, settings.Token, "getFile", map[string]any{"file_id": fileID})
+	if err != nil {
+		return fileInfo{}, err
+	}
+	var result struct {
+		FilePath string `json:"file_path"`
+		FileSize int64  `json:"file_size"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return fileInfo{}, err
+	}
+	return fileInfo{FilePath: result.FilePath, FileSize: result.FileSize}, nil
+}
+
+// downloadFile fetches a file previously resolved by getFile. The response is
+// capped at maxTelegramDownloadBytes+1 so an unexpectedly large file is
+// detected instead of silently truncated.
+func (c client) downloadFile(ctx context.Context, settings Settings, filePath string) ([]byte, error) {
+	httpClient, err := httpClientFor(settings.ProxyURL, 60*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("%s/file/bot%s/%s", c.apiBase, strings.TrimSpace(settings.Token), filePath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("telegram file download failed: %s", resp.Status)
+	}
+	content, err := io.ReadAll(io.LimitReader(resp.Body, maxTelegramDownloadBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(content)) > maxTelegramDownloadBytes {
+		return nil, fmt.Errorf("file exceeds the %d MB Telegram bot download limit", maxTelegramDownloadBytes>>20)
+	}
+	return content, nil
+}
+
 func (c client) answerCallbackQuery(ctx context.Context, settings Settings, callbackID string, text string) error {
 	payload := map[string]any{"callback_query_id": callbackID}
 	if strings.TrimSpace(text) != "" {

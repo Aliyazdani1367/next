@@ -179,6 +179,7 @@ func (s *Server) runTelegramBot(ctx context.Context) {
 		Authorizer: botAuthorizer{server: s},
 		Users:      botUserService{server: s},
 		System:     botSystemService{server: s},
+		Backup:     botBackupService{server: s},
 		DB:         s.db,
 	})
 	b.Run(ctx)

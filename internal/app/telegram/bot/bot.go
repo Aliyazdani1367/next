@@ -20,6 +20,7 @@ type Bot struct {
 	authorizer Authorizer
 	users      UserService
 	system     SystemService
+	backup     BackupService
 	state      stateStore
 
 	offset int64
@@ -33,6 +34,7 @@ type Options struct {
 	Authorizer Authorizer
 	Users      UserService
 	System     SystemService
+	Backup     BackupService
 	DB         *sql.DB
 	Logf       func(format string, args ...any)
 }
@@ -48,6 +50,7 @@ func New(opts Options) *Bot {
 		authorizer: opts.Authorizer,
 		users:      opts.Users,
 		system:     opts.System,
+		backup:     opts.Backup,
 		state:      newStateStore(opts.DB),
 		logf:       logf,
 	}
