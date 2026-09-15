@@ -21,6 +21,10 @@ func (b *Bot) handleMessage(ctx context.Context, settings Settings, msg *Message
 		return
 	}
 	if msg.Document != nil {
+		if !backupAuthorized(settings, chatID) {
+			b.reply(ctx, settings, chatID, backupNotAuthorizedText(), nil)
+			return
+		}
 		b.handleBackupDocument(ctx, settings, chatID, msg.Document)
 		return
 	}
@@ -45,12 +49,21 @@ func (b *Bot) handleMessage(ctx context.Context, settings Settings, msg *Message
 	case "/user":
 		b.handleUserCommand(ctx, settings, chatID, arg)
 	case "/backup":
+		if !backupAuthorized(settings, chatID) {
+			b.reply(ctx, settings, chatID, backupNotAuthorizedText(), nil)
+			return
+		}
 		b.handleBackupCommand(ctx, settings, chatID)
 	default:
 		if command != "" {
 			b.reply(ctx, settings, chatID, "Unknown command. Send /help.", nil)
 		}
 	}
+}
+
+func backupNotAuthorizedText() string {
+	return "🔒 Backup and restore commands are restricted to the dedicated backup chat. " +
+		"Set one in the dashboard under Settings → Telegram → Backup chat."
 }
 
 func (b *Bot) handleUsageCommand(ctx context.Context, settings Settings, chatID int64, username string) {
@@ -125,6 +138,13 @@ func (b *Bot) handleCallback(ctx context.Context, settings Settings, query *Call
 	}
 
 	switch query.Data {
+	case cbBackupSendNow, cbRestoreConfirm, cbRestoreCancel:
+		if !backupAuthorized(settings, userID) {
+			_ = b.client.answerCallbackQuery(ctx, settings, query.ID, "Not authorized for backup commands")
+			return
+		}
+	}
+	switch query.Data {
 	case cbBackupSendNow:
 		b.handleBackupSendNow(ctx, settings, query, chatID, messageID)
 		return
@@ -133,6 +153,11 @@ func (b *Bot) handleCallback(ctx context.Context, settings Settings, query *Call
 		return
 	case cbRestoreCancel:
 		b.handleRestoreCallback(ctx, settings, query, chatID, messageID, false)
+		return
+	}
+
+	if prefix == cbBackupSetSchedule && !backupAuthorized(settings, userID) {
+		_ = b.client.answerCallbackQuery(ctx, settings, query.ID, "Not authorized for backup commands")
 		return
 	}
 

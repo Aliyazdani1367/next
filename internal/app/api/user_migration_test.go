@@ -126,25 +126,40 @@ func TestBuildUserMigrationPayloadRejectsBlankUsername(t *testing.T) {
 
 func TestUserMigrationRegistryStageTakeAndExpiry(t *testing.T) {
 	var reg userMigrationRegistry
-	token := reg.stage("/tmp/does-not-matter")
+	token := reg.stage("/tmp/does-not-matter", 42)
 	if token == "" {
 		t.Fatal("expected a non-empty token")
 	}
-	path, ok := reg.take(token)
+	path, ok := reg.take(token, 42)
 	if !ok || path != "/tmp/does-not-matter" {
 		t.Fatalf("take() = %q, %v", path, ok)
 	}
-	if _, ok := reg.take(token); ok {
+	if _, ok := reg.take(token, 42); ok {
 		t.Fatal("token must not be reusable after being taken")
 	}
 
 	reg.mu.Lock()
 	reg.entries = map[string]userMigrationEntry{
-		"expired": {path: "/tmp/expired", expiresAt: time.Now().Add(-time.Minute)},
+		"expired": {path: "/tmp/expired", adminID: 42, expiresAt: time.Now().Add(-time.Minute)},
 	}
 	reg.mu.Unlock()
-	if _, ok := reg.take("expired"); ok {
+	if _, ok := reg.take("expired", 42); ok {
 		t.Fatal("expired entries must not be returned")
+	}
+}
+
+func TestUserMigrationRegistryRejectsCrossAdminTokenReuse(t *testing.T) {
+	var reg userMigrationRegistry
+	token := reg.stage("/tmp/uploaded-by-admin-1", 1)
+
+	if _, ok := reg.take(token, 2); ok {
+		t.Fatal("a token staged by one admin must not be redeemable by a different admin")
+	}
+	// The entry must still be there for the rightful owner after the failed
+	// cross-admin attempt.
+	path, ok := reg.take(token, 1)
+	if !ok || path != "/tmp/uploaded-by-admin-1" {
+		t.Fatalf("take(token, 1) = %q, %v", path, ok)
 	}
 }
 
@@ -220,7 +235,7 @@ func TestUserMigrationInspectListsAdminsFromForeignArchive(t *testing.T) {
 	}
 
 	// The staged upload must still exist so a follow-up import call can use it.
-	path, ok := server.userMigration.take(resp.Token)
+	path, ok := server.userMigration.take(resp.Token, 1)
 	if !ok {
 		t.Fatal("expected the inspected upload to remain staged")
 	}
@@ -272,5 +287,44 @@ func TestUserMigrationImportRejectsUnknownSourceAdmin(t *testing.T) {
 		`{"token":"`+inspectResp.Token+`","source_admin_username":"ghost","service_id":1}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for an admin absent from the archive, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestUserMigrationImportRejectsCrossAdminToken proves a token issued to one
+// admin's upload cannot be redeemed by a different admin's session, even
+// though both are authenticated. Without this, a second admin who merely
+// guesses or observes another admin's token could burn their staged upload
+// (or, if the reused token also had a valid source_admin_username, import
+// someone else's staged foreign users under their own account).
+func TestUserMigrationImportRejectsCrossAdminToken(t *testing.T) {
+	server, db := testAdminServer(t)
+	insertMasterAPIAdmin(t, db, 1, "owner", "pass123", adminapp.RoleFullAccess, adminapp.StatusActive)
+	insertMasterAPIAdmin(t, db, 2, "seller", "pass123", adminapp.RoleStandard, adminapp.StatusActive)
+	ownerToken := adminBearerToken(t, server, "owner", "pass123")
+	sellerToken := adminBearerToken(t, server, "seller", "pass123")
+
+	inspectRec := multipartBackupUpload(t, server, "/api/settings/user-migration/inspect", ownerToken, legacyJSONArchiveFixture(t), "owners-upload.rbbackup")
+	if inspectRec.Code != http.StatusOK {
+		t.Fatalf("inspect status = %d body=%s", inspectRec.Code, inspectRec.Body.String())
+	}
+	var inspectResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(inspectRec.Body.Bytes(), &inspectResp); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := adminJSONRequest(t, server, http.MethodPost, "/api/settings/user-migration/import", sellerToken,
+		`{"token":"`+inspectResp.Token+`","source_admin_username":"reseller_a","service_id":1}`)
+	if rec.Code != http.StatusGone {
+		t.Fatalf("expected 410 when a different admin redeems someone else's token, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// The failed cross-admin attempt must not have consumed or deleted the
+	// entry: the rightful owner can still redeem it (checked directly against
+	// the registry to avoid needing the full user-creation stack here).
+	path, ok := server.userMigration.take(inspectResp.Token, 1)
+	if !ok || path == "" {
+		t.Fatalf("expected the rightful owner to still be able to take the token, got path=%q ok=%v", path, ok)
 	}
 }

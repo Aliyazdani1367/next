@@ -35,6 +35,7 @@ func (b botSettingsSource) BotSettings(ctx context.Context) (telegrambot.Setting
 		Token:        token,
 		ProxyURL:     proxy,
 		AdminChatIDs: settings.AdminChatIDs,
+		BackupChatID: settings.BackupChatID,
 	}, nil
 }
 

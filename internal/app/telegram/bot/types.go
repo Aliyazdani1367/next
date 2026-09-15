@@ -63,6 +63,12 @@ type Settings struct {
 	Token        string
 	ProxyURL     string
 	AdminChatIDs []int64
+	// BackupChatID, when set, is the only chat allowed to run /backup
+	// commands (schedule changes, on-demand send, restore). Backup/restore
+	// moves or replaces the entire panel database, so it deliberately is not
+	// available to the wider AdminChatIDs allowlist used for routine
+	// user-management commands.
+	BackupChatID *int64
 }
 
 // SettingsSource provides the current Telegram settings.

@@ -123,6 +123,16 @@ func authorized(settings Settings, id int64) bool {
 	return false
 }
 
+// backupAuthorized reports whether the given Telegram id may run /backup
+// commands (schedule changes, on-demand send, restore). This is deliberately
+// a narrower check than authorized(): those actions can exfiltrate the whole
+// database or replace it outright, so they require the dedicated backup
+// chat rather than membership in the broader admin-command allowlist used
+// for routine user lookups/actions.
+func backupAuthorized(settings Settings, id int64) bool {
+	return settings.BackupChatID != nil && *settings.BackupChatID == id
+}
+
 func (b *Bot) reply(ctx context.Context, settings Settings, chatID int64, text string, keyboard *InlineKeyboard) {
 	if err := b.client.sendMessage(ctx, settings, chatID, text, keyboard); err != nil {
 		b.logf("telegram bot: sendMessage: %v", err)

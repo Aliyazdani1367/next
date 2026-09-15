@@ -29,19 +29,21 @@ const userMigrationUploadTTL = 20 * time.Minute
 
 type userMigrationEntry struct {
 	path      string
+	adminID   int64
 	expiresAt time.Time
 }
 
 // userMigrationRegistry stages an uploaded archive between the inspect and
 // import calls (the admin picks a source admin from the inspect response
 // before committing). Entries and their backing temp files expire on their
-// own if the admin never follows up.
+// own if the admin never follows up. Each entry is bound to the admin who
+// uploaded it, so a token can never be redeemed by a different admin session.
 type userMigrationRegistry struct {
 	mu      sync.Mutex
 	entries map[string]userMigrationEntry
 }
 
-func (r *userMigrationRegistry) stage(path string) string {
+func (r *userMigrationRegistry) stage(path string, adminID int64) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.evictLocked()
@@ -49,16 +51,16 @@ func (r *userMigrationRegistry) stage(path string) string {
 		r.entries = map[string]userMigrationEntry{}
 	}
 	token := randomMigrationToken()
-	r.entries[token] = userMigrationEntry{path: path, expiresAt: time.Now().Add(userMigrationUploadTTL)}
+	r.entries[token] = userMigrationEntry{path: path, adminID: adminID, expiresAt: time.Now().Add(userMigrationUploadTTL)}
 	return token
 }
 
-func (r *userMigrationRegistry) take(token string) (string, bool) {
+func (r *userMigrationRegistry) take(token string, adminID int64) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.evictLocked()
 	entry, ok := r.entries[token]
-	if !ok {
+	if !ok || entry.adminID != adminID {
 		return "", false
 	}
 	delete(r.entries, token)
@@ -92,6 +94,8 @@ func (s *Server) handleUserMigrationInspect(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	principal, _ := r.Context().Value(adminContextKey).(adminPrincipal)
+
 	uploadPath, cleanup, err := saveBackupUpload(w, r)
 	if err != nil {
 		writeBackupUploadError(w, err)
@@ -103,7 +107,7 @@ func (s *Server) handleUserMigrationInspect(w http.ResponseWriter, r *http.Reque
 		writeBackupError(w, err)
 		return
 	}
-	token := s.userMigration.stage(uploadPath)
+	token := s.userMigration.stage(uploadPath, principal.Context.Admin.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":  token,
 		"admins": admins,
@@ -141,14 +145,14 @@ func (s *Server) handleUserMigrationImport(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "token, source_admin_username, and service_id are required")
 		return
 	}
-	path, ok := s.userMigration.take(payload.Token)
+	principal, _ := r.Context().Value(adminContextKey).(adminPrincipal)
+
+	path, ok := s.userMigration.take(payload.Token, principal.Context.Admin.ID)
 	if !ok {
 		writeError(w, http.StatusGone, "This upload has expired. Upload the backup file again.")
 		return
 	}
 	defer os.Remove(path)
-
-	principal, _ := r.Context().Value(adminContextKey).(adminPrincipal)
 	admin := principal.Context.Admin
 
 	foreignUsers, err := backupapp.ExtractForeignUsers(path, payload.SourceAdminUsername)

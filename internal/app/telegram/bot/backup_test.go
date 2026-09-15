@@ -126,7 +126,8 @@ func newBackupTestBot(t *testing.T, backup BackupService, fileContent []byte) (*
 		DB:         db,
 		Logf:       func(string, ...any) {},
 	})
-	settings := Settings{Enabled: true, Token: "TOKEN", AdminChatIDs: []int64{100}}
+	backupChatID := int64(100)
+	settings := Settings{Enabled: true, Token: "TOKEN", AdminChatIDs: []int64{100}, BackupChatID: &backupChatID}
 	return b, &calls, settings
 }
 
@@ -317,5 +318,85 @@ func TestRestoreCallbackWithoutPendingStateIsNoOp(t *testing.T) {
 
 	if len(backup.restorePaths) != 0 {
 		t.Fatalf("expected no restore without pending state, got %v", backup.restorePaths)
+	}
+}
+
+// --- security: backup/restore must require the dedicated backup chat, not
+// just the general admin allowlist (a chat can be authorized() for routine
+// user-management commands without being allowed to exfiltrate or replace
+// the whole database). ---
+
+// otherAdminSettings is an admin chat (200) that is in AdminChatIDs (so it
+// can use /user, /usage, etc.) but is NOT the configured BackupChatID (100).
+func otherAdminSettings(base Settings) Settings {
+	base.AdminChatIDs = append([]int64{200}, base.AdminChatIDs...)
+	return base
+}
+
+func TestBackupCommandRejectedForNonBackupChat(t *testing.T) {
+	backup := &fakeBackup{status: BackupStatus{Enabled: true}}
+	b, calls, settings := newBackupTestBot(t, backup, nil)
+	settings = otherAdminSettings(settings)
+
+	b.handleMessage(context.Background(), settings, &Message{Chat: Chat{ID: 200}, Text: "/backup"})
+
+	call, ok := lastCall(*calls, "sendMessage")
+	if !ok {
+		t.Fatal("expected a rejection message")
+	}
+	if text, _ := call.body["text"].(string); !strings.Contains(text, "restricted to the dedicated backup chat") {
+		t.Fatalf("expected a not-authorized-for-backup message, got %q", text)
+	}
+}
+
+func TestBackupSendNowCallbackRejectedForNonBackupChat(t *testing.T) {
+	backup := &fakeBackup{sendResult: BackupSendResult{Filename: "secret.rbbackup"}}
+	b, calls, settings := newBackupTestBot(t, backup, nil)
+	settings = otherAdminSettings(settings)
+
+	b.handleCallback(context.Background(), settings, &CallbackQuery{
+		ID:      "c1",
+		From:    &User{ID: 200},
+		Message: &Message{MessageID: 5, Chat: Chat{ID: 200}},
+		Data:    cbBackupSendNow,
+	})
+
+	if call, ok := lastCall(*calls, "editMessageText"); ok {
+		t.Fatalf("expected no backup to be sent to a non-backup-chat admin, got editMessageText: %v", call.body)
+	}
+}
+
+func TestBackupDocumentRejectedForNonBackupChat(t *testing.T) {
+	backup := &fakeBackup{}
+	b, calls, settings := newBackupTestBot(t, backup, []byte("hello"))
+	settings = otherAdminSettings(settings)
+
+	b.handleMessage(context.Background(), settings, &Message{
+		Chat:     Chat{ID: 200},
+		Document: &Document{FileID: "f1", FileName: "backup.rbbackup", FileSize: 5},
+	})
+
+	if _, ok := lastCall(*calls, "getFile"); ok {
+		t.Fatal("a document from a non-backup-chat admin must never be downloaded")
+	}
+	if _, ok := b.state.get(context.Background(), 200); ok {
+		t.Fatal("no restore state should be staged for a non-backup-chat admin")
+	}
+}
+
+func TestBackupSetScheduleCallbackRejectedForNonBackupChat(t *testing.T) {
+	backup := &fakeBackup{}
+	b, _, settings := newBackupTestBot(t, backup, nil)
+	settings = otherAdminSettings(settings)
+
+	b.handleCallback(context.Background(), settings, &CallbackQuery{
+		ID:      "c1",
+		From:    &User{ID: 200},
+		Message: &Message{MessageID: 5, Chat: Chat{ID: 200}},
+		Data:    cbBackupSetSchedule + "6:hours",
+	})
+
+	if len(backup.scheduleCalls) != 0 {
+		t.Fatalf("expected no schedule change from a non-backup-chat admin, got %v", backup.scheduleCalls)
 	}
 }
