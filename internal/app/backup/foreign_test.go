@@ -446,3 +446,109 @@ func TestInspectRealMarzbanStyleHeaderlessMySQLDump(t *testing.T) {
 		t.Fatalf("admins = %+v, want %+v", admins, want)
 	}
 }
+
+// --- X-UI / 3x-ui ------------------------------------------------------
+
+func buildXUIDatabase(t *testing.T) string {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "x-ui.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT, login_secret TEXT)`,
+		`CREATE TABLE inbounds (id INTEGER PRIMARY KEY, remark TEXT, protocol TEXT, settings TEXT)`,
+		`CREATE TABLE client_traffics (id INTEGER PRIMARY KEY, inbound_id INTEGER, enable numeric, email TEXT, up INTEGER, down INTEGER, expiry_time INTEGER, total INTEGER)`,
+		`INSERT INTO users (id, username, password) VALUES (1, 'admin', 'hash')`,
+		`INSERT INTO inbounds (id, remark, protocol, settings) VALUES (1, 'main', 'vless', '{"clients":[
+			{"email":"alice","id":"uuid-1","limitIp":2,"tgId":"12345","totalGB":0,"expiryTime":0},
+			{"email":"bob","id":"uuid-2","limitIp":0,"tgId":"","totalGB":0,"expiryTime":0}
+		]}')`,
+		`INSERT INTO client_traffics (inbound_id, enable, email, up, down, expiry_time, total) VALUES
+			(1, 1, 'alice', 1000, 2000, 1759329562000, 32212254720),
+			(1, 0, 'bob', 0, 0, 0, 0)`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return dbPath
+}
+
+func TestInspectAndExtractXUIDatabase(t *testing.T) {
+	path := buildXUIDatabase(t)
+
+	admins, err := InspectForeignArchive(path)
+	if err != nil {
+		t.Fatalf("InspectForeignArchive: %v", err)
+	}
+	if len(admins) != 1 || admins[0].Username != "admin" || admins[0].UserCount != 2 {
+		t.Fatalf("admins = %+v", admins)
+	}
+
+	users, err := ExtractForeignUsers(path, "admin")
+	if err != nil {
+		t.Fatalf("ExtractForeignUsers: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d: %+v", len(users), users)
+	}
+	byName := map[string]ForeignUser{}
+	for _, u := range users {
+		byName[u.Username] = u
+	}
+
+	alice, ok := byName["alice"]
+	if !ok {
+		t.Fatal("expected alice")
+	}
+	if alice.Status != "active" {
+		t.Fatalf("alice.Status = %q, want active", alice.Status)
+	}
+	if alice.DataLimit == nil || *alice.DataLimit != 32212254720 {
+		t.Fatalf("alice.DataLimit = %v, want 32212254720", alice.DataLimit)
+	}
+	if alice.Expire == nil || *alice.Expire != 1759329562 {
+		t.Fatalf("alice.Expire = %v, want 1759329562 (ms converted to seconds)", alice.Expire)
+	}
+	if alice.IPLimit == nil || *alice.IPLimit != 2 {
+		t.Fatalf("alice.IPLimit = %v, want 2 (from inbound settings limitIp)", alice.IPLimit)
+	}
+	if alice.TelegramID == nil || *alice.TelegramID != 12345 {
+		t.Fatalf("alice.TelegramID = %v, want 12345", alice.TelegramID)
+	}
+
+	bob, ok := byName["bob"]
+	if !ok {
+		t.Fatal("expected bob")
+	}
+	if bob.Status != "disabled" {
+		t.Fatalf("bob.Status = %q, want disabled (enable=0)", bob.Status)
+	}
+	if bob.DataLimit != nil || bob.Expire != nil {
+		t.Fatalf("bob should have no limit/expire (0 means unlimited), got %+v", bob)
+	}
+}
+
+func TestXUIRejectedWhenSchemaUnrecognized(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "unknown.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE something_else (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := InspectForeignArchive(dbPath); err == nil {
+		t.Fatal("expected an error for an unrecognized sqlite schema")
+	}
+}

@@ -228,11 +228,52 @@ func detectBareForeignDatabase(path string) (foreignDatabase, bool, error) {
 		return nil, false, nil // gzip: Next's own wrapped .rbbackup format
 	}
 	if bytes.HasPrefix(header, sqliteFileMagic) {
-		db, err := openForeignSQLite(path)
+		db, err := openForeignSQLiteBySchema(path)
 		return db, true, err
 	}
 	db, err := parseForeignMySQLDump(path)
 	return db, true, err
+}
+
+// openForeignSQLiteBySchema opens a bare SQLite file and picks the right
+// reader for whichever panel produced it, by looking at which tables it
+// actually has rather than assuming a single schema.
+func openForeignSQLiteBySchema(path string) (foreignDatabase, error) {
+	conn, err := openReadOnlySQLiteConn(path)
+	if err != nil {
+		return nil, err
+	}
+	tables, err := sqliteTableNames(context.Background(), conn)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	switch {
+	case containsAll(tables, "admins", "users"):
+		return &foreignSQLiteDB{db: conn}, nil
+	case containsAll(tables, "inbounds", "client_traffics"):
+		return &foreignXUIDB{db: conn}, nil
+	default:
+		_ = conn.Close()
+		return nil, Error{Message: "This backup's database schema was not recognized"}
+	}
+}
+
+func sqliteTableNames(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table'")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 type cleanupWrappedDB struct {
@@ -252,6 +293,14 @@ type foreignSQLiteDB struct {
 }
 
 func openForeignSQLite(path string) (*foreignSQLiteDB, error) {
+	db, err := openReadOnlySQLiteConn(path)
+	if err != nil {
+		return nil, err
+	}
+	return &foreignSQLiteDB{db: db}, nil
+}
+
+func openReadOnlySQLiteConn(path string) (*sql.DB, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -265,7 +314,7 @@ func openForeignSQLite(path string) (*foreignSQLiteDB, error) {
 		_ = db.Close()
 		return nil, Error{Message: "Could not open the backup's database file"}
 	}
-	return &foreignSQLiteDB{db: db}, nil
+	return db, nil
 }
 
 func (f *foreignSQLiteDB) close() { _ = f.db.Close() }
@@ -351,6 +400,150 @@ func buildForeignUserRow(v map[string]any) foreignUserRow {
 			DataLimitResetStrategy: asString(v["data_limit_reset_strategy"]),
 		},
 	}
+}
+
+// --- X-UI / 3x-ui -----------------------------------------------------
+
+// foreignXUIDB reads an X-UI / 3x-ui panel's own sqlite database (commonly
+// named x-ui.db). Unlike Next/Marzban, X-UI has no concept of an admin owning
+// a set of proxy users: `users` is just the panel's own login account(s), and
+// the actual clients live inside each row of `inbounds.settings` (a JSON blob
+// with a "clients" array, one array per inbound/protocol), cross-referenced
+// by "email" (X-UI's client identifier, not a real email address) against the
+// `client_traffics` table for live usage/limit/expiry state. Every client is
+// attributed to the first (lowest id) panel login, since there is nothing in
+// X-UI's schema to split them by owner.
+type foreignXUIDB struct {
+	db *sql.DB
+}
+
+func (f *foreignXUIDB) close() { _ = f.db.Close() }
+
+func (f *foreignXUIDB) admins(ctx context.Context) (map[int64]string, error) {
+	rows, err := f.db.QueryContext(ctx, "SELECT id, username FROM users")
+	if err != nil {
+		return nil, Error{Message: "This backup does not contain an admins table"}
+	}
+	defer rows.Close()
+	result := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var username string
+		if err := rows.Scan(&id, &username); err != nil {
+			return nil, err
+		}
+		result[id] = username
+	}
+	if len(result) == 0 {
+		return nil, Error{Message: "This backup does not contain an admins table"}
+	}
+	return result, rows.Err()
+}
+
+type xuiClientExtra struct {
+	limitIP    int64
+	telegramID *int64
+}
+
+func (f *foreignXUIDB) users(ctx context.Context, _ map[string]int64) ([]foreignUserRow, error) {
+	var ownerID int64
+	if err := f.db.QueryRowContext(ctx, "SELECT id FROM users ORDER BY id LIMIT 1").Scan(&ownerID); err != nil {
+		return nil, Error{Message: "This backup does not contain an admins table"}
+	}
+
+	extras := map[string]xuiClientExtra{}
+	inboundRows, err := f.db.QueryContext(ctx, "SELECT settings FROM inbounds")
+	if err != nil {
+		return nil, Error{Message: "This backup does not contain an inbounds table"}
+	}
+	for inboundRows.Next() {
+		var settingsJSON sql.NullString
+		if err := inboundRows.Scan(&settingsJSON); err != nil {
+			inboundRows.Close()
+			return nil, err
+		}
+		if !settingsJSON.Valid {
+			continue
+		}
+		var parsed struct {
+			Clients []struct {
+				Email   string `json:"email"`
+				LimitIP int64  `json:"limitIp"`
+				TgID    any    `json:"tgId"`
+			} `json:"clients"`
+		}
+		if err := json.Unmarshal([]byte(settingsJSON.String), &parsed); err != nil {
+			continue
+		}
+		for _, client := range parsed.Clients {
+			email := strings.TrimSpace(client.Email)
+			if email == "" {
+				continue
+			}
+			extra := xuiClientExtra{limitIP: client.LimitIP}
+			if id, ok := asOptionalInt64Err(client.TgID); ok && id != 0 {
+				extra.telegramID = &id
+			}
+			extras[email] = extra
+		}
+	}
+	if err := inboundRows.Err(); err != nil {
+		inboundRows.Close()
+		return nil, err
+	}
+	inboundRows.Close()
+
+	trafficRows, err := f.db.QueryContext(ctx, "SELECT email, enable, expiry_time, total FROM client_traffics")
+	if err != nil {
+		return nil, Error{Message: "This backup does not contain a client_traffics table"}
+	}
+	defer trafficRows.Close()
+
+	result := []foreignUserRow{}
+	seen := map[string]bool{}
+	for trafficRows.Next() {
+		var email string
+		var enable bool
+		var expiryMS, total int64
+		if err := trafficRows.Scan(&email, &enable, &expiryMS, &total); err != nil {
+			return nil, err
+		}
+		email = strings.TrimSpace(email)
+		if email == "" || seen[email] {
+			continue
+		}
+		seen[email] = true
+
+		status := "disabled"
+		if enable {
+			status = "active"
+		}
+		var dataLimit *int64
+		if total > 0 {
+			dataLimit = &total
+		}
+		var expire *int64
+		if expiryMS > 0 {
+			seconds := expiryMS / 1000
+			expire = &seconds
+		}
+
+		user := ForeignUser{
+			Username:  email,
+			Status:    status,
+			DataLimit: dataLimit,
+			Expire:    expire,
+		}
+		if extra, ok := extras[email]; ok {
+			if extra.limitIP > 0 {
+				limit := extra.limitIP
+				user.IPLimit = &limit
+			}
+			user.TelegramID = extra.telegramID
+		}
+		result = append(result, foreignUserRow{AdminID: ownerID, User: user})
+	}
+	return result, trafficRows.Err()
 }
 
 // --- Legacy JSON --------------------------------------------------------
