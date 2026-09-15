@@ -124,7 +124,7 @@ jobs:
         run: bash -n scripts/next/next-binary.sh scripts/next/next.sh scripts/next/next-node-binary.sh scripts/next/next-node.sh
 
       - name: Download dashboard
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dashboard-build
           path: dashboard/build
@@ -166,7 +166,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download dashboard
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dashboard-build
           path: dashboard/build
@@ -239,7 +239,7 @@ jobs:
           echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: next-*
           path: release-assets
@@ -283,7 +283,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: next-*
           path: dev-release-assets
