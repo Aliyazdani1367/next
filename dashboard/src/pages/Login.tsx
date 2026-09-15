@@ -315,10 +315,6 @@ export const Login: FC = () => {
 		"var(--rb-panel-text-muted)",
 		"var(--rb-panel-text-muted)",
 	);
-	const logoFilter = useColorModeValue(
-		"brightness(0)",
-		"brightness(0) invert(1)",
-	);
 	const accentColor = "var(--rb-panel-accent)";
 
 	const {
@@ -487,11 +483,7 @@ export const Login: FC = () => {
 								justifyContent="center"
 								w={10}
 							>
-								<LogoIcon
-									alt={t("menu")}
-									filter={logoFilter}
-									src={logoUrl}
-								/>
+								<LogoIcon alt={t("menu")} src={logoUrl} />
 							</Box>
 							<Text fontSize="lg" fontWeight="800" noOfLines={1}>
 								Next

@@ -4,7 +4,6 @@ import {
 	HStack,
 	Text,
 	Tooltip,
-	useColorMode,
 	useColorModeValue,
 	VStack,
 } from "@chakra-ui/react";
@@ -121,7 +120,6 @@ export const AppSidebar: FC<AppSidebarProps> = ({
 	const location = useLocation();
 	const navigate = useNavigate();
 	const dashboardRoot = useHref("/");
-	const { colorMode } = useColorMode();
 	const { userData } = useGetUser();
 	const currentLanguage = i18n.language || "en";
 	const tutorialsUrl = "/tutorials";
@@ -477,13 +475,7 @@ export const AppSidebar: FC<AppSidebarProps> = ({
 							borderRadius="md"
 							bg={sidebarPanelBg}
 						>
-							<LogoIcon
-								src={logoUrl}
-								alt="Next"
-								filter={
-									colorMode === "dark" ? "brightness(0) invert(1)" : "none"
-								}
-							/>
+							<LogoIcon src={logoUrl} alt="Next" />
 							<Text fontSize="lg" fontWeight="bold" color={logoTextColor}>
 								{t("menu")}
 							</Text>
@@ -499,13 +491,7 @@ export const AppSidebar: FC<AppSidebarProps> = ({
 							py={2}
 						>
 							<Tooltip label="Next" placement="right" hasArrow>
-								<LogoIcon
-									src={logoUrl}
-									alt="Next"
-									filter={
-										colorMode === "dark" ? "brightness(0) invert(1)" : "none"
-									}
-								/>
+								<LogoIcon src={logoUrl} alt="Next" />
 							</Tooltip>
 						</HStack>
 					)}

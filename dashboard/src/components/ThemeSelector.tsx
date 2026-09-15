@@ -87,16 +87,16 @@ const SwatchIconChakra = chakra(SwatchIcon, {
 
 const ACCENT_OPTIONS: AccentOption[] = [
 	{
-		key: "indigo",
-		label: "Indigo",
-		color: "#6366f1",
-		hover: "#7f82f4",
+		key: "crimson",
+		label: "Red / Crimson",
+		color: "#e0003c",
+		hover: "#f01446",
 	},
 	{ key: "blue", label: "Blue", color: "#2563eb", hover: "#3b82f6" },
 	{ key: "green", label: "Green", color: "#16a34a", hover: "#22c55e" },
 	{ key: "purple", label: "Purple", color: "#7c3aed", hover: "#8b5cf6" },
 	{ key: "orange", label: "Orange", color: "#ea580c", hover: "#f97316" },
-	{ key: "crimson", label: "Red / Crimson", color: "#e0003c", hover: "#f01446" },
+	{ key: "indigo", label: "Indigo", color: "#6366f1", hover: "#7f82f4" },
 ];
 
 const THEME_OPTIONS: Array<{
@@ -224,13 +224,13 @@ const normalizeTheme = (value?: string | null): ThemeMode =>
 	value === "light" ? "light" : "dark";
 
 const normalizeAccent = (value?: string | null) =>
-	ACCENT_OPTIONS.some((option) => option.key === value) ? value! : "indigo";
+	ACCENT_OPTIONS.some((option) => option.key === value) ? value! : "crimson";
 
 const getStoredAccent = () => {
 	try {
 		return normalizeAccent(localStorage.getItem(ACCENT_KEY));
 	} catch {
-		return "indigo";
+		return "crimson";
 	}
 };
 
