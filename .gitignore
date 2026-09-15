@@ -180,3 +180,4 @@ go/internal/gateway/static/dashboard/build/*
 .tmp*
 tmp/
 artifacts/
+.claude/settings.local.json
