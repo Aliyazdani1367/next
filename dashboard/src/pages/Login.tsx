@@ -35,10 +35,13 @@ import {
 	UserIcon,
 } from "@heroicons/react/24/outline";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { keyframes } from "@emotion/react";
 import logoUrl from "assets/logo.svg";
 import { Language } from "components/Language";
+import { motion } from "framer-motion";
 import {
 	type FC,
+	type MouseEvent as ReactMouseEvent,
 	type ReactElement,
 	type ReactNode,
 	useEffect,
@@ -87,13 +90,38 @@ const LoginIcon = chakra(ArrowRightOnRectangleIcon, {
 
 const Eye = chakra(EyeIcon, { baseStyle: { h: 4, w: 4 } });
 const EyeSlash = chakra(EyeSlashIcon, { baseStyle: { h: 4, w: 4 } });
-const User = chakra(UserIcon, { baseStyle: { h: 5, strokeWidth: "1.8px", w: 5 } });
+const User = chakra(UserIcon, {
+	baseStyle: { h: 5, strokeWidth: "1.8px", w: 5 },
+});
 const Lock = chakra(LockClosedIcon, {
 	baseStyle: { h: 5, strokeWidth: "1.8px", w: 5 },
 });
 const Moon = chakra(MoonIcon, { baseStyle: { h: 4, w: 4 } });
 const Sun = chakra(SunIcon, { baseStyle: { h: 4, w: 4 } });
 const Check = chakra(CheckIcon, { baseStyle: { h: 4, w: 4 } });
+
+const MotionBox = motion(Box);
+
+const floatBlobA = keyframes`
+	0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+	50% { transform: translate3d(4%, -6%, 0) scale(1.12); }
+`;
+const floatBlobB = keyframes`
+	0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+	50% { transform: translate3d(-5%, 5%, 0) scale(1.08); }
+`;
+const floatBlobC = keyframes`
+	0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+	50% { transform: translate3d(3%, 4%, 0) scale(0.94); }
+`;
+const glowPulse = keyframes`
+	0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+	50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.08); }
+`;
+const logoPulse = keyframes`
+	0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rb-panel-accent) 45%, transparent); }
+	50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--rb-panel-accent) 0%, transparent); }
+`;
 
 const THEME_KEY = "rb-theme";
 const CHAKRA_THEME_KEY = "chakra-ui-color-mode";
@@ -431,12 +459,20 @@ export const Login: FC = () => {
 		setError("");
 	};
 
+	const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+	const handleCardMouseMove = (event: ReactMouseEvent<HTMLDivElement>) => {
+		const rect = event.currentTarget.getBoundingClientRect();
+		const px = (event.clientX - rect.left) / rect.width;
+		const py = (event.clientY - rect.top) / rect.height;
+		setTilt({ rx: (0.5 - py) * 8, ry: (px - 0.5) * 8 });
+	};
+	const handleCardMouseLeave = () => setTilt({ rx: 0, ry: 0 });
+	const blobOpacity = useColorModeValue(0.35, 0.55);
+
 	const passwordToggle = (
 		<IconButton
 			aria-label={
-				showPassword
-					? t("admins.hidePassword")
-					: t("admins.showPassword")
+				showPassword ? t("admins.hidePassword") : t("admins.showPassword")
 			}
 			color={mutedColor}
 			icon={showPassword ? <EyeSlash /> : <Eye />}
@@ -455,175 +491,262 @@ export const Login: FC = () => {
 			display="flex"
 			justifyContent="center"
 			minH="100dvh"
+			overflow="hidden"
+			position="relative"
 			px={{ base: 4, md: 10 }}
 			py={{ base: 6, md: 10 }}
 			w="full"
 		>
-			<VStack maxW="400px" spacing={6} w="full">
-				<Box
-					bg={surfaceBg}
-					borderColor={borderColor}
-					borderRadius="8px"
-					borderWidth="1px"
-					boxShadow="0 18px 60px rgba(0, 0, 0, 0.22)"
-					p={{ base: 5, sm: 6 }}
-					w="full"
-				>
-					<HStack justifyContent="space-between" mb={7} spacing={3}>
-						<HStack color={textColor} minW={0} spacing={3}>
-							<Box
-								alignItems="center"
-								bg={elevatedBg}
-								borderColor={borderColor}
-								borderRadius="8px"
-								borderWidth="1px"
-								display="inline-flex"
-								flexShrink={0}
-								h={10}
-								justifyContent="center"
-								w={10}
-							>
-								<LogoIcon alt={t("menu")} src={logoUrl} />
-							</Box>
-							<Text fontSize="lg" fontWeight="800" noOfLines={1}>
-								Next
-							</Text>
-						</HStack>
-						<HStack flexShrink={0} spacing={2}>
-							<Language triggerVariant="ghost" />
-							<LoginThemeMenu />
-						</HStack>
-					</HStack>
-
-					<VStack align="stretch" spacing={1} textAlign="center">
-						<Text color={textColor} fontSize="lg" fontWeight="800">
-							{step === "credentials"
-								? t("login.welcome")
-								: step === "otp"
-									? t("login.twoFactorTitle")
-									: t("login.setupTwoFactorTitle")}
-						</Text>
-						<Text color={mutedColor} fontSize="sm">
-							{step === "credentials"
-								? t("login.welcomeBack")
-								: step === "otp"
-									? t("login.twoFactorHint")
-									: t("login.setupTwoFactorHint")}
-						</Text>
-					</VStack>
-
-					<Box mt={6}>
-						{step === "credentials" ? (
-						<form onSubmit={handleSubmit(login, handleInvalid)}>
-							<VStack spacing={4}>
-								<LoginField
-									autoComplete="username"
-									dir={dir}
-									errorMessage={
-										errors.username?.message
-											? t(errors.username.message as string)
-											: undefined
-									}
-									icon={<User />}
-									label={t("username")}
-									placeholder={t("username")}
-									registration={register("username")}
-								/>
-								<LoginField
-									autoComplete="current-password"
-									dir={dir}
-									endElement={passwordToggle}
-									errorMessage={
-										errors.password?.message
-											? t(errors.password.message as string)
-											: undefined
-									}
-									icon={<Lock />}
-									label={t("password")}
-									placeholder={t("password")}
-									registration={register("password")}
-									type={showPassword ? "text" : "password"}
-								/>
-
-								{error && (
-									<Alert
-										borderRadius="8px"
-										fontSize="sm"
-										status="error"
-										variant="left-accent"
-										w="full"
+			<Box
+				bg="var(--rb-panel-accent)"
+				borderRadius="full"
+				filter="blur(90px)"
+				h={{ base: "260px", md: "420px" }}
+				left={{ base: "-15%", md: "-5%" }}
+				opacity={blobOpacity}
+				pointerEvents="none"
+				position="absolute"
+				top={{ base: "-10%", md: "-8%" }}
+				w={{ base: "260px", md: "420px" }}
+				css={{ animation: `${floatBlobA} 16s ease-in-out infinite` }}
+			/>
+			<Box
+				bg="var(--rb-panel-accent-hover)"
+				borderRadius="full"
+				bottom={{ base: "-15%", md: "-10%" }}
+				filter="blur(100px)"
+				h={{ base: "280px", md: "460px" }}
+				opacity={blobOpacity}
+				pointerEvents="none"
+				position="absolute"
+				right={{ base: "-15%", md: "-6%" }}
+				w={{ base: "280px", md: "460px" }}
+				css={{ animation: `${floatBlobB} 20s ease-in-out infinite` }}
+			/>
+			<Box
+				bg={borderColor}
+				borderRadius="full"
+				filter="blur(80px)"
+				h={{ base: "220px", md: "320px" }}
+				left="50%"
+				opacity={blobOpacity}
+				pointerEvents="none"
+				position="absolute"
+				top="55%"
+				w={{ base: "220px", md: "320px" }}
+				css={{ animation: `${floatBlobC} 14s ease-in-out infinite` }}
+			/>
+			<MotionBox
+				animate={{ opacity: 1, y: 0 }}
+				initial={{ opacity: 0, y: 28 }}
+				position="relative"
+				transition={{ duration: 0.5, ease: "easeOut" }}
+				zIndex={1}
+			>
+				<VStack maxW="400px" spacing={6} w="full">
+					<Box position="relative" w="full">
+						<Box
+							bg="var(--rb-panel-accent)"
+							borderRadius="20px"
+							filter="blur(40px)"
+							h="70%"
+							left="50%"
+							opacity={0.35}
+							pointerEvents="none"
+							position="absolute"
+							top="50%"
+							w="90%"
+							zIndex={-1}
+							css={{ animation: `${glowPulse} 4s ease-in-out infinite` }}
+						/>
+						<Box
+							bg={surfaceBg}
+							borderColor={borderColor}
+							borderRadius="16px"
+							borderWidth="1px"
+							boxShadow="0 30px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+							p={{ base: 5, sm: 6 }}
+							style={{
+								transform: `perspective(1000px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
+								transition: "transform 0.15s ease-out",
+							}}
+							w="full"
+							onMouseLeave={handleCardMouseLeave}
+							onMouseMove={handleCardMouseMove}
+						>
+							<HStack justifyContent="space-between" mb={7} spacing={3}>
+								<HStack color={textColor} minW={0} spacing={3}>
+									<Box
+										alignItems="center"
+										bg={elevatedBg}
+										borderColor={borderColor}
+										borderRadius="10px"
+										borderWidth="1px"
+										display="inline-flex"
+										flexShrink={0}
+										h={10}
+										justifyContent="center"
+										w={10}
+										css={{
+											animation: `${logoPulse} 2.6s ease-in-out infinite`,
+										}}
 									>
-										<AlertIcon />
-										<AlertDescription>{error}</AlertDescription>
-									</Alert>
-								)}
+										<LogoIcon alt={t("menu")} src={logoUrl} />
+									</Box>
+									<Text fontSize="lg" fontWeight="800" noOfLines={1}>
+										Next
+									</Text>
+								</HStack>
+								<HStack flexShrink={0} spacing={2}>
+									<Language triggerVariant="ghost" />
+									<LoginThemeMenu />
+								</HStack>
+							</HStack>
 
-								<Button
-									bg={accentColor}
-									borderRadius="8px"
-									color="white"
-									h="44px"
-									isDisabled={!canSubmit}
-									isLoading={isSubmitting}
-									leftIcon={<LoginIcon />}
-									mt={1}
-									type="submit"
-									w="full"
-									_hover={{ bg: "var(--rb-panel-accent-hover)" }}
-									_active={{ transform: "translateY(1px)" }}
-								>
-									{t("login")}
-								</Button>
+							<VStack align="stretch" spacing={1} textAlign="center">
+								<Text color={textColor} fontSize="lg" fontWeight="800">
+									{step === "credentials"
+										? t("login.welcome")
+										: step === "otp"
+											? t("login.twoFactorTitle")
+											: t("login.setupTwoFactorTitle")}
+								</Text>
+								<Text color={mutedColor} fontSize="sm">
+									{step === "credentials"
+										? t("login.welcomeBack")
+										: step === "otp"
+											? t("login.twoFactorHint")
+											: t("login.setupTwoFactorHint")}
+								</Text>
 							</VStack>
-						</form>
-						) : (
-							<VStack spacing={4}>
-								{step === "setup" && setup && (
-									<>
-										<Box bg="white" borderRadius="8px" p={3}>
-											<QRCodeCanvas value={setup.uri} size={180} />
-										</Box>
-										<Text color={mutedColor} fontFamily="mono" fontSize="xs" wordBreak="break-all">
-											{setup.secret}
-										</Text>
-									</>
+
+							<Box mt={6}>
+								{step === "credentials" ? (
+									<form onSubmit={handleSubmit(login, handleInvalid)}>
+										<VStack spacing={4}>
+											<LoginField
+												autoComplete="username"
+												dir={dir}
+												errorMessage={
+													errors.username?.message
+														? t(errors.username.message as string)
+														: undefined
+												}
+												icon={<User />}
+												label={t("username")}
+												placeholder={t("username")}
+												registration={register("username")}
+											/>
+											<LoginField
+												autoComplete="current-password"
+												dir={dir}
+												endElement={passwordToggle}
+												errorMessage={
+													errors.password?.message
+														? t(errors.password.message as string)
+														: undefined
+												}
+												icon={<Lock />}
+												label={t("password")}
+												placeholder={t("password")}
+												registration={register("password")}
+												type={showPassword ? "text" : "password"}
+											/>
+
+											{error && (
+												<Alert
+													borderRadius="8px"
+													fontSize="sm"
+													status="error"
+													variant="left-accent"
+													w="full"
+												>
+													<AlertIcon />
+													<AlertDescription>{error}</AlertDescription>
+												</Alert>
+											)}
+
+											<Button
+												bg={accentColor}
+												borderRadius="8px"
+												color="white"
+												h="44px"
+												isDisabled={!canSubmit}
+												isLoading={isSubmitting}
+												leftIcon={<LoginIcon />}
+												mt={1}
+												type="submit"
+												w="full"
+												_hover={{ bg: "var(--rb-panel-accent-hover)" }}
+												_active={{ transform: "translateY(1px)" }}
+											>
+												{t("login")}
+											</Button>
+										</VStack>
+									</form>
+								) : (
+									<VStack spacing={4}>
+										{step === "setup" && setup && (
+											<>
+												<Box bg="white" borderRadius="8px" p={3}>
+													<QRCodeCanvas value={setup.uri} size={180} />
+												</Box>
+												<Text
+													color={mutedColor}
+													fontFamily="mono"
+													fontSize="xs"
+													wordBreak="break-all"
+												>
+													{setup.secret}
+												</Text>
+											</>
+										)}
+										<FormControl>
+											<FormLabel>{t("login.authenticationCode")}</FormLabel>
+											<CInput
+												autoComplete="one-time-code"
+												inputMode="numeric"
+												maxLength={6}
+												textAlign="center"
+												value={otp}
+												onChange={(event) =>
+													setOTP(event.target.value.replace(/\D/g, ""))
+												}
+											/>
+										</FormControl>
+										{error && (
+											<Alert
+												borderRadius="8px"
+												fontSize="sm"
+												status="error"
+												variant="left-accent"
+												w="full"
+											>
+												<AlertIcon />
+												<AlertDescription>{error}</AlertDescription>
+											</Alert>
+										)}
+										<Button
+											bg={accentColor}
+											color="white"
+											h="44px"
+											isDisabled={otp.length !== 6}
+											isLoading={challengeLoading}
+											onClick={step === "otp" ? submitOTP : confirmSetup}
+											w="full"
+										>
+											{t("continue")}
+										</Button>
+										<Button onClick={cancelChallenge} variant="ghost" w="full">
+											{t("back")}
+										</Button>
+									</VStack>
 								)}
-								<FormControl>
-									<FormLabel>{t("login.authenticationCode")}</FormLabel>
-									<CInput
-										autoComplete="one-time-code"
-										inputMode="numeric"
-										maxLength={6}
-										textAlign="center"
-										value={otp}
-										onChange={(event) => setOTP(event.target.value.replace(/\D/g, ""))}
-									/>
-								</FormControl>
-								{error && (
-									<Alert borderRadius="8px" fontSize="sm" status="error" variant="left-accent" w="full">
-										<AlertIcon />
-										<AlertDescription>{error}</AlertDescription>
-									</Alert>
-								)}
-								<Button
-									bg={accentColor}
-									color="white"
-									h="44px"
-									isDisabled={otp.length !== 6}
-									isLoading={challengeLoading}
-									onClick={step === "otp" ? submitOTP : confirmSetup}
-									w="full"
-								>
-									{t("continue")}
-								</Button>
-								<Button onClick={cancelChallenge} variant="ghost" w="full">
-									{t("back")}
-								</Button>
-							</VStack>
-						)}
+							</Box>
+						</Box>
 					</Box>
-				</Box>
-			</VStack>
+				</VStack>
+			</MotionBox>
 		</Box>
 	);
 };
